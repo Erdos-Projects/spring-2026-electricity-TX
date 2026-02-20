@@ -1,4 +1,10 @@
-data/
+/data/*
+!/data/raw/
+/data/raw/*
+!/data/raw/ercot/
+/data/raw/ercot/*
+!/data/raw/ercot/NP6-346-CD/
+!/data/raw/ercot/NP6-346-CD/**
 *.log
 __pycache__/
 *.py[cod]

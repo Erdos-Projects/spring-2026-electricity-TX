@@ -4,15 +4,18 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
 
 ## Documentation Map
 
-- `DATA_DOWNLOAD_RUNBOOK.md`
+- `DATA_DOWNLOAD.md`
   - Use as the single source of truth for data download.
   - Includes setup, credentials, canonical command template, dataset reference, DNS troubleshooting, and Git LFS guidance.
-- `DATA_CLEANING_RUNBOOK.md`
+- `DATA_CLEANING.md`
   - Use for cleaning and preparing analysis-ready data.
   - Includes dedupe keys, interval handling (`NP6-905-CD`), validation checklist, and EDA merge template.
 - `LOCAL_DOWNLOAD_NOTES.md`
-  - Use only for personal overrides (`START_DATE`/`MONTHS` values).
-  - Keep operational instructions in `DATA_DOWNLOAD_RUNBOOK.md`.
+  - Use only for personal overrides (`START_DATE`/`WINDOW_MONTHS` values).
+  - Keep operational instructions in `DATA_DOWNLOAD.md`.
+- `GIT_TERMINAL.md`
+  - Beginner guide for Git in terminal.
+  - Covers fetch/pull, local edits, stage, commit, push, merge workflows, and terminal setup for Codex/Gemini.
 
 Use the runbooks above for step-by-step instructions.
 
@@ -30,10 +33,19 @@ Use the runbooks above for step-by-step instructions.
 1. Choose datasets for your task:
    - Use `scripts/list_ercot_analysis_datasets.py` or the download runbook priority table.
 2. Download raw data:
-   - Follow `DATA_DOWNLOAD_RUNBOOK.md`.
+   - Follow `DATA_DOWNLOAD.md`.
 3. Clean and merge for analysis:
-   - Follow `DATA_CLEANING_RUNBOOK.md`.
+   - Follow `DATA_CLEANING.md`.
 4. Run notebooks/EDA on processed outputs.
+
+## Collaboration Workflow
+
+For all Git-related operations, use `GIT_TERMINAL.md`:
+- branch creation and naming
+- fetch/pull/rebase choices
+- staging, commit, push
+- pull request and merge workflow
+- conflict resolution
 
 ## Data Layout
 

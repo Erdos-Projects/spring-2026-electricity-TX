@@ -6,6 +6,7 @@ Goal:
 - Run downloads reliably from terminal.
 - Reuse one canonical command template.
 - Keep dataset choices, frequencies, and earliest-date references in one place.
+- Use config + checkpoints + structured logs so reruns are automatic.
 
 ## Table of Contents
 
@@ -13,9 +14,11 @@ Goal:
 2. [Run Canonical Download Command (Window-Based)](#2-run-canonical-download-command-window-based)
 3. [Tune Logging and Progress](#3-tune-logging-and-progress)
 4. [Select Datasets (Priority + Usage)](#4-select-datasets-priority--usage)
-5. [Resume Failed Runs and Handle Errors](#5-resume-failed-runs-and-handle-errors)
-6. [Diagnose DNS with Verbose Logging](#6-diagnose-dns-with-verbose-logging)
-7. [Apply Git LFS After Dataset Completion](#7-apply-git-lfs-after-dataset-completion)
+5. [Makefile Shortcuts](#5-makefile-shortcuts)
+6. [Resume Failed Runs and Handle Errors](#6-resume-failed-runs-and-handle-errors)
+7. [Diagnose DNS with Verbose Logging](#7-diagnose-dns-with-verbose-logging)
+8. [Apply Git LFS After Dataset Completion](#8-apply-git-lfs-after-dataset-completion)
+9. [Coverage Audit + Day-Based Time Estimate](#9-coverage-audit--day-based-time-estimate-as-of-2026-02-21)
 
 ## 1. Prepare Environment
 
@@ -31,8 +34,8 @@ Create/activate Python environment and install required package:
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
-python3 -m pip install requests
-python3 -c "import requests; print('requests ok:', requests.__version__)"
+python3 -m pip install requests pyyaml
+python3 -c "import requests, yaml; print('requests ok:', requests.__version__); print('pyyaml ok:', yaml.__version__)"
 ```
 
 Create ERCOT API access:
@@ -52,99 +55,63 @@ export ERCOT_SUBSCRIPTION_KEY="your_subscription_key"
 Optionally list available API product IDs for your account.
 
 ```bash
-python3 scripts/download_ercot_public_reports.py --list-api-products
+# after creating config/download.yaml in Section 2:
+make download DOWNLOAD_ARGS="--list-api-products"
 ```
 
 ## 2. Run Canonical Download Command (Window-Based)
 
-Use this template for all runs.
+Recommended flow (make-first):
+1. Copy sample config.
+2. Edit `config/download.yaml`.
+3. Run `make download`.
 
-Change only:
-- Set `START_DATE` (`YYYY-MM-DD`).
-- Set `MONTHS` (`1`, `3`, `6`, `12`).
-- Edit dataset lines (`--dataset ...`).
-
-`END_DATE` is auto-calculated and capped at `NEWEST_DATE` (yesterday).
+Copy sample config:
 
 ```bash
-START_DATE="2025-11-01"
-MONTHS=3
-NEWEST_DATE="$(python3 - <<'PY'
-from datetime import date, timedelta
-print((date.today() - timedelta(days=1)).isoformat())
-PY
-)"
+mkdir -p config
+cp config/download.sample.yaml config/download.yaml
+```
 
-if [[ ! "$MONTHS" =~ ^(1|3|6|12)$ ]]; then
-  echo "MONTHS must be one of: 1, 3, 6, 12"
-  exit 1
-fi
+Edit `config/download.yaml`, then run:
 
-if [[ "$START_DATE" > "$NEWEST_DATE" ]]; then
-  echo "START_DATE (${START_DATE}) is after NEWEST_DATE (${NEWEST_DATE})"
-  exit 1
-fi
+```bash
+make download
+```
 
-END_DATE="$(python3 - "$START_DATE" "$MONTHS" "$NEWEST_DATE" <<'PY'
-import sys
-import calendar
-from datetime import date, timedelta
+Override config file path:
 
-y, m, d = map(int, sys.argv[1].split("-"))
-months = int(sys.argv[2])
-newest = date.fromisoformat(sys.argv[3])
-start = date(y, m, d)
+```bash
+make download CONFIG=config/download.sample.yaml
+```
 
-month_index = (start.year * 12 + start.month - 1) + months
-end_year = month_index // 12
-end_month = month_index % 12 + 1
-end_day = min(start.day, calendar.monthrange(end_year, end_month)[1])
-end_exclusive = date(end_year, end_month, end_day)
-window_end = end_exclusive - timedelta(days=1)
-if window_end > newest:
-    window_end = newest
-print(window_end.isoformat())
-PY
-)"
+One-off overrides without editing config:
 
-echo "Downloading ${MONTHS}-month window: ${START_DATE} to ${END_DATE} (newest cap: ${NEWEST_DATE})"
+```bash
+make download DOWNLOAD_ARGS="--from-date 2025-11-01 --window-months 3"
+```
 
-python3 scripts/download_ercot_public_reports.py \
-  --datasets-only \
-  --dataset NP6-346-CD \
-  --dataset NP6-905-CD \
-  --dataset NP4-732-CD \
-  --dataset NP4-745-CD \
-  --dataset NP3-233-CD \
-  --dataset NP3-565-CD \
-  --dataset NP4-523-CD \
-  --dataset NP6-788-CD \
-  --dataset NP6-331-CD \
-  --dataset NP4-188-CD \
-  --dataset NP3-911-ER \
-  --from-date "${START_DATE}" \
-  --to-date "${END_DATE}" \
-  --outdir data/raw/ercot \
-  --consolidate-monthly \
-  --delete-source-after-consolidation \
-  --download-order newest-first \
-  --sort-monthly-output descending \
-  --sort-existing-monthly \
-  --archive-progress-pages 100 \
-  --request-interval-seconds 2.0 \
-  --max-retries 10 \
-  --retry-sleep-seconds 4 \
-  --archive-listing-retries 20 \
-  --max-consecutive-network-failures 8 \
-  --network-failure-cooldown-seconds 30 \
-  --file-timing-frequency daily \
-  --write-manifest
+Run status tools after download:
+
+```bash
+make last-run
+make resume-status
 ```
 
 Expect this behavior:
+- `--window-months`: computes end date inside the script (inclusive window) and caps at yesterday if `--to-date` is omitted.
 - `--download-order newest-first`: download backward in time.
 - `--sort-monthly-output descending`: keep monthly CSV rows newest-to-oldest by timestamp.
+- `--sort-existing-monthly`: sorts only existing monthly CSV files within the active dataset date window.
 - `.docids` sidecars prevent duplicate appends on rerun.
+- `--state-dir` + `--resume-state` (default on): writes per-dataset checkpoints in `state/<DATASET>.json`.
+- `--logs-dir`: writes one folder per run with `run.log`, `failures.csv`, and `summary.json`.
+
+Sample override command (from `2025-09-01`, `2` months, daily prints, archive progress every `10` pages):
+
+```bash
+make download DOWNLOAD_ARGS="--from-date 2025-09-01 --window-months 2 --archive-progress-pages 10 --file-timing-frequency daily"
+```
 
 ## 3. Tune Logging and Progress
 
@@ -195,14 +162,53 @@ Earliest-date reference source:
 - ERCOT Market Participants data-product details (`First Run Date`), checked 2026-02-21.
 - URL pattern: `https://www.ercot.com/mp/data-products/data-product-details?id=<DATASET_ID>`.
 
-## 5. Resume Failed Runs and Handle Errors
+## 5. Makefile Shortcuts
+
+Use these as your default download operations:
+
+```bash
+make help
+make download
+make last-run
+make resume-status
+make estimate-time
+```
+
+Notes:
+- `make download` uses `config/download.yaml` by default.
+- Override config path:
+`make download CONFIG=config/download.sample.yaml`
+- Add extra one-off flags:
+`make download DOWNLOAD_ARGS='--dataset NP3-233-CD --from-date 2025-11-01 --window-months 2'`
+- View latest run logs and summary:
+`make last-run`
+- View checkpoint progress:
+`make resume-status`
+- Compute per-dataset day-based total-time estimate:
+`make estimate-time`
+
+## 6. Resume Failed Runs and Handle Errors
 
 When a run fails:
 - Rerun the same command after interruptions.
-- Deduplication uses:
-  - `data/raw/ercot/<DATASET>/<YYYY>/<MM>/<DATASET>_<YYYYMM>.csv.docids`
+- Deduplication uses `.docids`:
+`data/raw/ercot/<DATASET>/<YYYY>/<MM>/<DATASET>_<YYYYMM>.csv.docids`
+- Checkpoint resume uses:
+`state/<DATASET>.json` and `state/<DATASET>.archive_docs.jsonl`
+- Structured run artifacts are in:
+`logs/downloads/<YYYYMMDD_HHMMSS>/run.log`
+`logs/downloads/<YYYYMMDD_HHMMSS>/failures.csv`
+`logs/downloads/<YYYYMMDD_HHMMSS>/summary.json`
 
 Do not delete `.docids` unless you intentionally want to rebuild monthly files.
+Do not delete `state/*.json` or `state/*.archive_docs.jsonl` unless you intentionally want to restart listing/process progress.
+
+Quick checks:
+
+```bash
+make last-run
+make resume-status
+```
 
 Common issues:
 1. `429 Too Many Requests`
@@ -226,9 +232,10 @@ done
 
 4. Dataset endpoint `404`
 - The dataset may not be in current public-reports catalog for your account.
-- Check available IDs with `--list-api-products`.
+- Check available IDs with:
+`make download DOWNLOAD_ARGS="--list-api-products"`
 
-## 6. Diagnose DNS with Verbose Logging
+## 7. Diagnose DNS with Verbose Logging
 
 Use this loop to diagnose unstable API connectivity.
 
@@ -261,7 +268,7 @@ Share the latest DNS log quickly:
 tail -n 40 "$(ls -1t logs/dns_health_*.log | head -n 1)"
 ```
 
-## 7. Apply Git LFS After Dataset Completion
+## 8. Apply Git LFS After Dataset Completion
 
 Install and initialize:
 
@@ -291,3 +298,66 @@ Important:
 - LFS usage is based on uploaded object size per version.
 - Re-migrating/re-uploading incomplete datasets can consume quota quickly.
 - Migrate to LFS only after that dataset download is complete.
+
+## 9. Coverage Audit + Day-Based Time Estimate (as of 2026-02-21)
+
+### 9.1 Window Check: 2025-11-01 to 2026-02-20
+
+Audit method:
+- Checked every dataset ID listed in Section 4.
+- Parsed local CSV date/day fields from `data/raw/ercot/<DATASET>/<YYYY>/<MM>/<DATASET>_<YYYYMM>.csv`.
+- Counted distinct covered dates in `[2025-11-01, 2026-02-20]` (`112` days total).
+
+Result: the full window is **not** completely downloaded for all dataset types.
+
+| Dataset ID | Full window downloaded? | Coverage detail |
+|---|---|---|
+| `NP6-346-CD` | No | `109/112` days. Missing: `2025-12-04`, `2026-01-16`, `2026-02-07`. |
+| `NP6-905-CD` | Yes | `112/112` days. |
+| `NP4-732-CD` | Yes | `112/112` days. |
+| `NP4-745-CD` | Yes | `112/112` days. |
+| `NP3-233-CD` | Yes | `112/112` days. |
+| `NP3-565-CD` | Yes | `112/112` days. |
+| `NP4-523-CD` | No | `92/112` days. Missing `2025-11-01` and `2026-02-02` through `2026-02-20`. |
+| `NP6-788-CD` | No | Dataset directory missing in local data. |
+| `NP6-331-CD` | No | Dataset directory missing in local data. |
+| `NP4-188-CD` | No | Dataset directory missing in local data. |
+| `NP3-911-ER` | No | Dataset directory missing in local data. |
+| `NP3-912-ER` | No | Still unresolved in API notes (`404` in Section 4), no local data. |
+
+### 9.2 Day-Based Estimation Method (Per Dataset)
+
+Use per-dataset day timing, not one shared rate across all datasets.
+
+Formula:
+- `mean_sec_per_day(dataset) = average(day_completion_delta_seconds)`
+- `estimated_total_seconds(dataset) = mean_sec_per_day(dataset) * total_dataset_days`
+- `estimated_total_hours = estimated_total_seconds / 3600`
+
+How day deltas are measured:
+- Read `DAY COMPLETE dataset=... completed_at=...` lines from `logs/downloads/*/run.log`.
+- For each dataset, compute differences between consecutive `completed_at` timestamps.
+- Aggregate these per-day intervals per dataset.
+
+### 9.3 Compute the Estimate (Recommended)
+
+Run:
+
+```bash
+make estimate-time
+```
+
+Optional fixed horizon date:
+
+```bash
+make estimate-time AS_OF=2026-02-21
+```
+
+The estimator uses:
+- Earliest dates listed in Section 4.
+- Per-dataset daily intervals from run logs.
+
+Important:
+- You need at least a few `DAY COMPLETE` events per dataset for stable estimates.
+- Keep `--file-timing-frequency daily` enabled (already in sample config).
+- If a dataset has insufficient day samples, estimator prints `N/A` for that dataset.

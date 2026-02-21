@@ -1,125 +1,45 @@
 # spring-2026-electricity-TX
 
-Scripts and notebooks for collecting and analyzing ERCOT electricity data for Texas.
+Repository for downloading, organizing, and analyzing ERCOT electricity data for Texas.
 
-## ERCOT data scripts
+## Documentation Map
 
-### 1) Determine datasets needed for analysis
+- `DATA_DOWNLOAD_RUNBOOK.md`
+  - Use as the single source of truth for data download.
+  - Includes setup, credentials, canonical command template, dataset reference, DNS troubleshooting, and Git LFS guidance.
+- `DATA_CLEANING_RUNBOOK.md`
+  - Use for cleaning and preparing analysis-ready data.
+  - Includes dedupe keys, interval handling (`NP6-905-CD`), validation checklist, and EDA merge template.
+- `LOCAL_DOWNLOAD_NOTES.md`
+  - Use only for personal overrides (`START_DATE`/`MONTHS` values).
+  - Keep operational instructions in `DATA_DOWNLOAD_RUNBOOK.md`.
 
-Use the profile selector to print recommended ERCOT datasets and reasons:
+Use the runbooks above for step-by-step instructions.
 
-```bash
-python3 scripts/list_ercot_analysis_datasets.py --profile core
-```
+## Core Scripts
 
-Available profiles:
-- `core`: load, load forecast, wind, solar, real-time prices, day-ahead price, outages.
-- `market`: day-ahead/real-time pricing plus ancillary service prices.
-- `reliability`: outages, resource capability/output, weather-driven load forecasts.
-- `all`: all datasets in the local catalog.
+- `scripts/download_ercot_public_reports.py`
+  - Main downloader for ERCOT public reports API.
+- `scripts/list_ercot_analysis_datasets.py`
+  - Prints recommended dataset IDs by profile with reasons.
+- `scripts/ercot_dataset_catalog.py`
+  - Central dataset catalog and profile definitions.
 
-### Dataset ID meaning
+## Typical Workflow
 
-ERCOT API products are selected by `dataset ID` (also called report/product ID or EMIL ID), for example `NP6-905-CD`.
+1. Choose datasets for your task:
+   - Use `scripts/list_ercot_analysis_datasets.py` or the download runbook priority table.
+2. Download raw data:
+   - Follow `DATA_DOWNLOAD_RUNBOOK.md`.
+3. Clean and merge for analysis:
+   - Follow `DATA_CLEANING_RUNBOOK.md`.
+4. Run notebooks/EDA on processed outputs.
 
-- Format pattern: `NP<group>-<number>-<suffix>`
-- `NP6-905-CD` means a specific public report ("Settlement Point Prices at Resource Nodes, Hubs and Load Zones")
-- Use `--dataset <ID>` to download exactly what you want
-- Use `--list-api-products` to see IDs available to your account
+## Data Layout
 
-### Data types and granularity
+- Raw downloads:
+  - `data/raw/ercot/<DATASET_ID>/<YYYY>/<MM>/...`
+- Processed outputs:
+  - `data/processed/ercot/<DATASET_ID>/...`
 
-Common ERCOT data types used in this repo:
-
-- `Load`: actual system load and load forecasts (hourly and forecast products)
-- `Renewables`: wind/solar actual and forecast values (hourly and some 5-minute products)
-- `Prices`: real-time and day-ahead market prices (interval-based products)
-- `Ancillary services`: capacity clearing prices and reserve-related market products
-- `Reliability`: outages and resource capability/availability related reports
-
-Granularity depends on the dataset ID. Some products are hourly, some are 15-minute, and some are 5-minute.
-
-### 2) Download ERCOT public report files
-
-The downloader uses ERCOT's official `public-reports` API and archive endpoint.
-
-Set credentials from your ERCOT API portal account:
-
-```bash
-export ERCOT_API_USERNAME="your-ercot-username"
-export ERCOT_API_PASSWORD="your-ercot-password"
-export ERCOT_SUBSCRIPTION_KEY="your-subscription-key"
-```
-
-Download the default `core` profile for a date range:
-
-```bash
-python3 scripts/download_ercot_public_reports.py \
-  --from-date 2025-01-01 \
-  --to-date 2025-12-31 \
-  --outdir data/raw/ercot \
-  --extract-zips \
-  --write-manifest
-```
-
-Download only specific dataset IDs (custom selection):
-
-```bash
-python3 scripts/download_ercot_public_reports.py \
-  --from-date 2024-01-01 \
-  --to-date 2024-12-31 \
-  --outdir data/raw/ercot_custom \
-  --dataset NP6-905-CD \
-  --dataset NP4-732-CD \
-  --dataset NP4-745-CD \
-  --write-manifest
-```
-
-Preview what will be downloaded before running:
-
-```bash
-python3 scripts/download_ercot_public_reports.py \
-  --from-date 2024-01-01 \
-  --to-date 2024-01-31 \
-  --dataset NP6-905-CD \
-  --dry-run
-```
-
-For long-range runs with fewer files (recommended for 10-year pulls), consolidate per month:
-
-```bash
-python3 scripts/download_ercot_public_reports.py \
-  --profile core \
-  --from-date 2016-01-01 \
-  --to-date 2025-12-31 \
-  --outdir data/raw/ercot \
-  --consolidate-monthly \
-  --request-interval-seconds 0.5 \
-  --delete-source-after-consolidation \
-  --write-manifest
-```
-
-Useful options:
-- `--profile market` or `--profile reliability` (repeatable).
-- `--dataset NP6-905-CD` to add a specific dataset ID (repeat `--dataset` for multiple IDs).
-- `--list-api-products` to list all products available to your API account.
-- `--dry-run` to preview downloads without writing files.
-- `--max-docs-per-dataset 10` for quick testing.
-- `--consolidate-monthly` to store one combined CSV per dataset/month.
-- `--delete-source-after-consolidation` to remove per-doc files after append.
-- `--request-interval-seconds 0.5` to reduce 429 rate-limit errors on long runs.
-
-## Notes
-
-- The new scripts are targeted downloaders. They avoid broad webpage scraping and focus on the report IDs you actually need.
-- Output is organized by `data/raw/ercot/<DATASET_ID>/<YYYY>/<MM>/`.
-- With `--consolidate-monthly`, each month is appended into `data/raw/ercot/<DATASET_ID>/<YYYY>/<MM>/<DATASET_ID>_<YYYYMM>.csv` and tracked with a `.docids` marker for rerun dedupe.
-
-### What `.docids` files are for
-
-When you use `--consolidate-monthly`, the downloader writes a sidecar file:
-
-- Path pattern: `data/raw/ercot/<DATASET_ID>/<YYYY>/<MM>/<DATASET_ID>_<YYYYMM>.csv.docids`
-- Contents: one `docId` per line for documents already merged into that monthly CSV
-- Purpose: prevents duplicate appends on reruns and allows safe resume after interruptions
-- Operational note: do not delete `.docids` unless you intentionally want to rebuild that monthly CSV from scratch
+When monthly consolidation is used, `.docids` sidecar files are written next to monthly CSVs for safe resume and deduplication.

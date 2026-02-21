@@ -143,7 +143,8 @@ def resolve_dataset_ids(
     selected: List[str] = []
     seen = set()
 
-    selected_profiles = list(profile_names or [DEFAULT_PROFILE])
+    # None => default profile, [] => no profile datasets (explicit dataset IDs only).
+    selected_profiles = [DEFAULT_PROFILE] if profile_names is None else list(profile_names)
     for profile in selected_profiles:
         if profile not in PROFILES:
             raise KeyError(f"Unknown profile '{profile}'. Choices: {', '.join(available_profiles())}")

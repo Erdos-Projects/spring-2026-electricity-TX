@@ -14,3 +14,4 @@
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+LOCAL_DOWNLOAD_NOTES.md

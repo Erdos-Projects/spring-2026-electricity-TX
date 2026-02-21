@@ -1,0 +1,40 @@
+# Copy to config/download.yaml (ignored by git), then edit values.
+
+credentials:
+  username: "your_username"
+  password: "your_password"
+  subscription_key: "your_subscription_key"
+
+download:
+  datasets_only: true
+  datasets:
+    - NP4-732-CD
+    - NP4-745-CD
+    - NP3-233-CD
+  from_date: "2025-09-01"
+  window_months: 2
+  outdir: "data/raw/ercot"
+  consolidate_monthly: true
+  delete_source_after_consolidation: true
+  download_order: "newest-first"
+  sort_monthly_output: "descending"
+  sort_existing_monthly: true
+  file_timing_frequency: "daily"
+  write_manifest: true
+
+network:
+  page_size: 1000
+  archive_progress_pages: 10
+  request_interval_seconds: 2.0
+  max_retries: 10
+  retry_sleep_seconds: 4
+  archive_listing_retries: 20
+  max_consecutive_network_failures: 8
+  network_failure_cooldown_seconds: 30
+
+resume:
+  state_dir: "state"
+  resume_state: true
+
+logging:
+  logs_dir: "logs/downloads"

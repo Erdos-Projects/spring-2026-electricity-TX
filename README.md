@@ -16,6 +16,12 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
 - `GIT_TERMINAL.md`
   - Beginner guide for Git in terminal.
   - Covers fetch/pull, local edits, stage, commit, push, merge workflows, and terminal setup for Codex/Gemini.
+- `config/download.sample.yaml`
+  - Starter config for downloader runs via `make download`.
+  - Copy to `config/download.yaml` for local credentials and run settings.
+- `Makefile`
+  - Shortcut commands for downloader operations.
+  - Run `make help` to see `download`, `last-run`, `resume-status`, and `estimate-time`.
 
 Use the runbooks above for step-by-step instructions.
 
@@ -33,7 +39,8 @@ Use the runbooks above for step-by-step instructions.
 1. Choose datasets for your task:
    - Use `scripts/list_ercot_analysis_datasets.py` or the download runbook priority table.
 2. Download raw data:
-   - Follow `DATA_DOWNLOAD.md`.
+   - Follow `DATA_DOWNLOAD.md` and use Makefile commands.
+   - Start with `make help`, then use `make download`, `make last-run`, `make resume-status`, `make estimate-time`.
 3. Clean and merge for analysis:
    - Follow `DATA_CLEANING.md`.
 4. Run notebooks/EDA on processed outputs.

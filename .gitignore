@@ -4,7 +4,12 @@
 !/data/raw/ercot/
 /data/raw/ercot/*
 !/data/raw/ercot/NP6-346-CD/
-!/data/raw/ercot/NP6-346-CD/**
+# Keep directory traversal available for selective unignore rules.
+/data/raw/ercot/NP6-346-CD/**
+!/data/raw/ercot/NP6-346-CD/**/
+# Only track consolidated monthly outputs for this dataset.
+!/data/raw/ercot/NP6-346-CD/**/*.csv
+!/data/raw/ercot/NP6-346-CD/**/*.csv.docids
 *.log
 __pycache__/
 *.py[cod]

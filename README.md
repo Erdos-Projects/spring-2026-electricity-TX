@@ -2,17 +2,26 @@
 
 Repository for downloading, organizing, and analyzing ERCOT electricity data for Texas.
 
+## Quick Doc Routing
+
+- Run and troubleshoot downloads: `DATA_DOWNLOAD.md`
+- Plan what to download, expected size, and expected time: `DATA_ESTIMATION.md`
+- Clean and validate downloaded data: `DATA_CLEANING.md`
+
 ## Documentation Map
 
 - `DATA_DOWNLOAD.md`
-  - Use as the single source of truth for data download.
-  - Includes setup, credentials, canonical command template, dataset reference, DNS troubleshooting, and Git LFS guidance.
+  - Use for download execution and troubleshooting.
+  - Includes setup, credentials, canonical command template, dataset reference, DNS troubleshooting, and Git LFS steps.
+- `DATA_ESTIMATION.md`
+  - Use for dataset-selection planning before download runs.
+  - Includes time/storage estimation methods, latest estimate tables, and scenario recommendations (`<=10GB`, `<=50h`).
 - `DATA_CLEANING.md`
   - Use for cleaning and preparing analysis-ready data.
   - Includes dedupe keys, interval handling (`NP6-905-CD`), validation checklist, and EDA merge template.
 - `LOCAL_DOWNLOAD_NOTES.md`
   - Use only for personal overrides (`START_DATE`/`WINDOW_MONTHS` values).
-  - Keep operational instructions in `DATA_DOWNLOAD.md`.
+  - Keep download instructions in `DATA_DOWNLOAD.md`.
 - `GIT_TERMINAL.md`
   - Beginner guide for Git in terminal.
   - Covers fetch/pull, local edits, stage, commit, push, merge workflows, and terminal setup for Codex/Gemini.
@@ -21,9 +30,9 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
   - Copy to `config/download.yaml` for local credentials and run settings.
 - `Makefile`
   - Shortcut commands for downloader operations.
-  - Run `make help` to see `download`, `last-run`, `resume-status`, and `estimate-time`.
+  - Run `make help` to see `download`, `last-run`, `resume-status`, `estimate-time`, and `estimate-size`.
 
-Use the runbooks above for step-by-step instructions.
+Use these runbooks as the default workflow.
 
 ## Core Scripts
 
@@ -37,10 +46,11 @@ Use the runbooks above for step-by-step instructions.
 ## Typical Workflow
 
 1. Choose datasets for your task:
-   - Use `scripts/list_ercot_analysis_datasets.py` or the download runbook priority table.
+   - Use `scripts/list_ercot_analysis_datasets.py`, `DATA_DOWNLOAD.md` (dataset catalog), and `DATA_ESTIMATION.md` (size/time planning).
+   - Optionally run `make estimate-time` and `make estimate-size` before deciding `--from-date`.
 2. Download raw data:
    - Follow `DATA_DOWNLOAD.md` and use Makefile commands.
-   - Start with `make help`, then use `make download`, `make last-run`, `make resume-status`, `make estimate-time`.
+   - Start with `make help`, then use `make download`, `make last-run`, `make resume-status`.
 3. Clean and merge for analysis:
    - Follow `DATA_CLEANING.md`.
 4. Run notebooks/EDA on processed outputs.

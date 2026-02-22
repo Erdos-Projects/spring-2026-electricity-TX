@@ -1,4 +1,4 @@
-.PHONY: help download last-run resume-status estimate-time
+.PHONY: help download last-run resume-status estimate-time estimate-size
 
 PYTHON ?= python3
 SCRIPT ?= scripts/download_ercot_public_reports.py
@@ -14,7 +14,8 @@ help:
 	@echo "  make download        Run downloader with --config (default: config/download.yaml)"
 	@echo "  make last-run        Show latest run summary/log/failures from logs/downloads"
 	@echo "  make resume-status   Show per-dataset checkpoint status from state/*.json"
-	@echo "  make estimate-time   Estimate per-dataset total download time from DAY COMPLETE logs"
+	@echo "  make estimate-time   Estimate per-dataset total download time from logs + local fallback"
+	@echo "  make estimate-size   Estimate per-dataset total storage from monthly CSV sizes"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make download"
@@ -23,6 +24,9 @@ help:
 	@echo "  make estimate-time"
 	@echo "  make estimate-time AS_OF=2026-02-21"
 	@echo "  make estimate-time EST_DATASET=NP6-346-CD"
+	@echo "  make estimate-size"
+	@echo "  make estimate-size AS_OF=2026-02-22"
+	@echo "  make estimate-size EST_DATASET=NP6-346-CD"
 
 download:
 	@if [ ! -f "$(CONFIG)" ]; then \
@@ -72,3 +76,9 @@ estimate-time:
 	if [ -n "$(AS_OF)" ]; then args="$$args --as-of $(AS_OF)"; fi; \
 	if [ -n "$(EST_DATASET)" ]; then args="$$args --dataset $(EST_DATASET)"; fi; \
 	$(PYTHON) scripts/estimate_download_time.py --logs-dir "$(LOGS_DIR)" $$args
+
+estimate-size:
+	@args=""; \
+	if [ -n "$(AS_OF)" ]; then args="$$args --as-of $(AS_OF)"; fi; \
+	if [ -n "$(EST_DATASET)" ]; then args="$$args --dataset $(EST_DATASET)"; fi; \
+	$(PYTHON) scripts/estimate_dataset_size.py --data-root "data/raw/ercot" $$args

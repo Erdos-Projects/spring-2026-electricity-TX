@@ -6,6 +6,8 @@ credentials:
   subscription_key: "your_subscription_key"
 
 download:
+  # When true: CLI --dataset values override this list; if no CLI --dataset is passed,
+  # the downloader uses this configured list.
   datasets_only: true
   datasets:
     - NP4-732-CD

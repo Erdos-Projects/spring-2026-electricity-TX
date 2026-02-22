@@ -45,9 +45,9 @@ python3 -c "import requests, yaml; print('requests ok:', requests.__version__); 
 ```
 
 Create ERCOT API access:
-1. Sign in/register at ERCOT API portal.
+1. Go to `https://apiexplorer.ercot.com/apis` and sign in/register.
 2. Allow pop-ups/redirects for `ercotb2c.b2clogin.com`.
-3. Subscribe to `public-reports` API product.
+3. Go to `https://apiexplorer.ercot.com/products` and subscribe to Public API (`public-reports`).
 4. Copy your subscription key (this is your API key).
 
 Credential variables used by the downloader:

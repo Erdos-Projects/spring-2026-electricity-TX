@@ -129,23 +129,40 @@ make download DOWNLOAD_ARGS="--datasets-only \
 --file-timing-frequency daily"
 ```
 
-Date interval options:
-- `--from-date` + `--window-months` (auto end-date window)
-- `--from-date` + `--to-date` (explicit start/end range)
-- If both are provided, effective `--to-date` is capped to the earlier of:
-window-calculated end date and explicit `--to-date`.
+Dataset override template (explicit CLI dataset list):
+
+```bash
+make download DOWNLOAD_ARGS="--datasets-only \
+--dataset NP6-331-CD \
+--dataset NP4-188-CD \
+--dataset NP3-911-ER \
+--from-date 2025-11-01 \
+--window-months 3 \
+--file-timing-frequency daily"
+```
+
+`--datasets-only` selection behavior:
+- If CLI `--dataset` flags are present, only those CLI dataset IDs are used.
+- If no CLI `--dataset` flags are present, the downloader uses `download.datasets` from `config/download.yaml`.
+
+Date parameters (clear rules):
+1. `--from-date` is required.
+2. Choose one end-date mode: `--to-date` (fixed range) or `--window-months` (relative range).
+3. `--window-months` allowed values are `1`, `2`, `3`, `6`, `12`.
+4. If both `--to-date` and `--window-months` are provided, explicit `--to-date` is used and the window end is ignored.
+5. Window logic is inclusive. Example: `--from-date 2025-11-01 --window-months 3` computes `2026-01-31`; with no explicit `--to-date`, it is capped at `2025-12-31`.
 
 Examples:
 
 ```bash
-# start + months
-make download DOWNLOAD_ARGS="--dataset NP3-233-CD --from-date 2025-11-01 --window-months 3"
+# Mode A: relative window (from + months)
+make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --window-months 3"
 
-# start + end
-make download DOWNLOAD_ARGS="--dataset NP3-233-CD --from-date 2025-11-01 --to-date 2025-12-31"
+# Mode B: fixed range (from + to)
+make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --to-date 2025-12-31"
 
-# start + months + end (end date capped to earlier value)
-make download DOWNLOAD_ARGS="--dataset NP3-233-CD --from-date 2025-11-01 --window-months 3 --to-date 2025-12-31"
+# Mixed inputs: explicit --to-date wins
+make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --window-months 3 --to-date 2025-12-31"
 ```
 
 Add these reliability/network flags only when needed:
@@ -155,7 +172,7 @@ Add these reliability/network flags only when needed:
 - `--max-consecutive-network-failures 8 --network-failure-cooldown-seconds 30`
 
 Expected behavior:
-- `--window-months`: computes end date inside the script (inclusive window) and caps at yesterday if `--to-date` is omitted.
+- `--window-months`: computes end date inside the script (inclusive window) and caps at `2025-12-31` if `--to-date` is omitted.
 - `--download-order newest-first`: download backward in time.
 - `--sort-monthly-output descending`: keep monthly CSV rows newest-to-oldest by timestamp.
 - `--sort-existing-monthly`: sorts only existing monthly CSV files within the active dataset date window.

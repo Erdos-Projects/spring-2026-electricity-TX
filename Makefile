@@ -20,7 +20,7 @@ help:
 	@echo "Examples:"
 	@echo "  make download"
 	@echo "  make download CONFIG=config/download.sample.yaml"
-	@echo "  make download DOWNLOAD_ARGS='--dataset NP3-233-CD --from-date 2025-11-01 --window-months 2'"
+	@echo "  make download DOWNLOAD_ARGS='--datasets-only --dataset NP4-188-CD --dataset NP4-523-CD --from-date 2025-11-01 --to-date 2025-12-31'"
 	@echo "  make estimate-time"
 	@echo "  make estimate-time AS_OF=2026-02-21"
 	@echo "  make estimate-time EST_DATASET=NP6-346-CD"

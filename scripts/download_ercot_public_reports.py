@@ -413,6 +413,31 @@ def parse_date(value: str) -> date:
         raise argparse.ArgumentTypeError(f"Invalid date '{value}'. Use YYYY-MM-DD.") from exc
 
 
+def cli_repeatable_values(argv: Sequence[str], flag: str) -> List[str]:
+    values: List[str] = []
+    index = 0
+    prefix = f"{flag}="
+    while index < len(argv):
+        token = argv[index]
+        if token == "--":
+            break
+        if token == flag:
+            if index + 1 < len(argv):
+                next_token = argv[index + 1]
+                if not next_token.startswith("-"):
+                    values.append(next_token)
+                    index += 2
+                    continue
+            index += 1
+            continue
+        if token.startswith(prefix):
+            value = token[len(prefix) :].strip()
+            if value:
+                values.append(value)
+        index += 1
+    return values
+
+
 def add_months(value: date, months: int) -> date:
     if months <= 0:
         raise ValueError("months must be greater than 0")
@@ -1399,7 +1424,8 @@ def parse_args() -> argparse.Namespace:
         help=(
             f"End date (YYYY-MM-DD). If omitted, defaults to {DEFAULT_TO_DATE.isoformat()}. "
             "When --window-months is set and --to-date is omitted, "
-            f"end date is auto-calculated and capped at {DEFAULT_TO_DATE.isoformat()}."
+            f"end date is auto-calculated and capped at {DEFAULT_TO_DATE.isoformat()}. "
+            "If --to-date is explicitly provided, it is used as-is."
         ),
     )
     parser.add_argument(
@@ -1409,7 +1435,7 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help=(
             "Auto-calculate end date from --from-date using an inclusive N-month window "
-            "(1, 2, 3, 6, or 12 months)."
+            "(1, 2, 3, 6, or 12 months). Ignored when --to-date is explicitly set."
         ),
     )
     parser.add_argument(
@@ -1443,7 +1469,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--datasets-only",
         action="store_true",
-        help="Use only --dataset IDs (do not include default core profile when --profile is omitted).",
+        help=(
+            "Use only --dataset IDs (no profiles). "
+            "When CLI --dataset is provided, it overrides configured dataset lists."
+        ),
     )
     parser.add_argument(
         "--exclude-dataset",
@@ -1586,7 +1615,11 @@ def parse_args() -> argparse.Namespace:
 
     if config_defaults:
         parser.set_defaults(**config_defaults)
-    return parser.parse_args()
+
+    args = parser.parse_args()
+    cli_argv = sys.argv[1:]
+    args.cli_dataset = normalize_dataset_ids(cli_repeatable_values(cli_argv, "--dataset"))
+    return args
 
 
 def main() -> None:
@@ -1668,11 +1701,10 @@ def main() -> None:
                     f"(window={args.window_months} month(s), cap={DEFAULT_TO_DATE.isoformat()})"
                 )
             else:
-                args.to_date = min(calculated_to_date, args.to_date)
                 print(
-                    "Using window-months mode: "
-                    f"--to-date set to {args.to_date.isoformat()} "
-                    f"(window={args.window_months} month(s), capped by explicit --to-date)"
+                    "Using explicit --to-date override: "
+                    f"--to-date kept at {args.to_date.isoformat()} "
+                    f"(window={args.window_months} month(s), computed window end={calculated_to_date.isoformat()} ignored)"
                 )
         elif args.to_date is None:
             args.to_date = DEFAULT_TO_DATE
@@ -1699,8 +1731,17 @@ def main() -> None:
         }
 
         selected_profiles = args.profile
-        if selected_profiles is None:
-            selected_profiles = [] if args.datasets_only else ["core"]
+        explicit_cli_datasets = normalize_dataset_ids(getattr(args, "cli_dataset", []))
+        if args.datasets_only:
+            selected_profiles = []
+            if explicit_cli_datasets:
+                args.dataset = explicit_cli_datasets
+                print(f"datasets-only mode: using CLI datasets: {', '.join(args.dataset)}")
+            elif args.dataset:
+                args.dataset = normalize_dataset_ids(args.dataset)
+                print("datasets-only mode: no CLI --dataset provided; using configured dataset list.")
+        elif selected_profiles is None:
+            selected_profiles = ["core"]
         selected_ids = resolve_dataset_ids(selected_profiles, args.dataset)
         excluded_ids = set(normalize_dataset_ids(args.exclude_dataset or []))
         if excluded_ids:

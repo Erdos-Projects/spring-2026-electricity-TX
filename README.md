@@ -28,9 +28,11 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
 - `config/download.sample.yaml`
   - Starter config for downloader runs via `make download`.
   - Copy to `config/download.yaml` for local credentials and run settings.
+  - New clone quick start: `mkdir -p config && cp config/download.sample.yaml config/download.yaml`
 - `Makefile`
   - Shortcut commands for downloader operations.
   - Run `make help` to see `download`, `last-run`, `resume-status`, `estimate-time`, and `estimate-size`.
+  - For `make download`, prefer `DOWNLOAD_CONFIG=...` and `DOWNLOAD_FLAGS="..."`.
 
 Use these runbooks as the default workflow.
 

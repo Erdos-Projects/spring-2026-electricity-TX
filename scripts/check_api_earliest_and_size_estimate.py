@@ -5,7 +5,7 @@ Usage:
   export ERCOT_API_USERNAME="..."
   export ERCOT_API_PASSWORD="..."
   export ERCOT_SUBSCRIPTION_KEY="..."
-  python3 scripts/check_api_earliest_and_size_estimate.py --to-date 2026-02-21
+  python3 scripts/check_api_earliest_and_size_estimate.py --to-date 2025-12-31
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ def local_monthly_avg_bytes(dataset_id: str, outdir: Path) -> Tuple[Optional[flo
 
 
 def parse_args() -> argparse.Namespace:
-    today = date.today()
+    default_to_date = date(2025, 12, 31)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--username", help="ERCOT username. Falls back to ERCOT_API_USERNAME.")
     parser.add_argument("--password", help="ERCOT password. Falls back to ERCOT_API_PASSWORD.")
@@ -107,8 +107,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--to-date",
         type=parse_date,
-        default=today,
-        help="End date for earliest-date search and month count (YYYY-MM-DD).",
+        default=default_to_date,
+        help=f"End date for earliest-date search and month count (YYYY-MM-DD). Default: {default_to_date.isoformat()}.",
     )
     parser.add_argument(
         "--search-from",

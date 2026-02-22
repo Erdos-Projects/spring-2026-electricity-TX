@@ -80,7 +80,7 @@ python3 -c 'import os; ks=("ERCOT_API_USERNAME","ERCOT_API_PASSWORD","ERCOT_SUBS
 
 Security notes:
 - Keep credentials blank/missing in `config/download.yaml` so env vars are used.
-- Do not pass password/API key in `DOWNLOAD_ARGS` (can leak to shell history/process list).
+- Do not pass password/API key in `DOWNLOAD_FLAGS` (can leak to shell history/process list).
 - `config/download.yaml` is ignored by git for local-only settings.
 - After finishing downloads, clear credentials:
 
@@ -92,17 +92,22 @@ Optional: list available API product IDs for your account.
 
 ```bash
 # after creating config/download.yaml in Section 2:
-make download DOWNLOAD_ARGS="--list-api-products"
+make download DOWNLOAD_FLAGS="--list-api-products"
 ```
 
 ## 2. Run Canonical Download Command (Date-Range Based)
 
-One-time setup:
+For a fresh clone, create local config from the sample:
 
 ```bash
 mkdir -p config
 cp config/download.sample.yaml config/download.yaml
 ```
+
+Notes:
+- The sample file is `config/download.sample.yaml`.
+- `config/download.yaml` is local-only and git-ignored, so each person should create their own copy.
+- To avoid accidental overwrite, use `cp -i config/download.sample.yaml config/download.yaml`.
 
 After copy, the default date range is:
 - `from_date: 2016-01-01` (10-year default range)
@@ -114,21 +119,27 @@ Shared-run rule:
 - Do not include `2026` in shared date ranges.
 - Set `--to-date 2025-12-31` when using explicit start/end ranges.
 
+Readable `make download` arguments:
+- `DOWNLOAD_CONFIG`: path to config file (default `config/download.yaml`)
+- `DOWNLOAD_FLAGS`: downloader CLI flags passed after `--config`
+
 Default run command (recommended). Edit dataset list and date range each time:
 
 ```bash
-make download DOWNLOAD_ARGS="--datasets-only \
+make download DOWNLOAD_FLAGS="--datasets-only \
+--dataset NP6-346-CD \
+--dataset NP3-565-CD \
 --dataset NP4-732-CD \
 --dataset NP4-745-CD \
---dataset NP3-233-CD \
+--dataset NP6-905-CD \
 --dataset NP4-523-CD \
+--dataset NP3-233-CD \
 --dataset NP6-788-CD \
 --dataset NP6-331-CD \
 --dataset NP4-188-CD \
 --dataset NP3-911-ER \
---from-date 2025-11-01 \
+--from-date 2016-01-01 \
 --to-date 2025-12-31 \
---download-order newest-first \
 --archive-progress-pages 10 \
 --file-timing-frequency daily"
 ```
@@ -136,7 +147,7 @@ make download DOWNLOAD_ARGS="--datasets-only \
 Dataset override template (explicit CLI dataset list):
 
 ```bash
-make download DOWNLOAD_ARGS="--datasets-only \
+make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP6-331-CD \
 --dataset NP4-188-CD \
 --dataset NP3-911-ER \
@@ -158,10 +169,10 @@ Examples:
 
 ```bash
 # Mode A: use default end date (2025-12-31)
-make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01"
+make download DOWNLOAD_FLAGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01"
 
 # Mode B: fixed range (from + to)
-make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --to-date 2025-12-31"
+make download DOWNLOAD_FLAGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --to-date 2025-12-31"
 ```
 
 Add these reliability/network flags only when needed:
@@ -180,7 +191,7 @@ Expected behavior:
 - `--logs-dir`: writes one folder per run with `run.log`, `failures.csv`, and `summary.json`.
 
 Command formatting tips:
-- Keep one opening `"` after `DOWNLOAD_ARGS=` and one closing `"` at the end of the last line.
+- Keep one opening `"` after `DOWNLOAD_FLAGS=` and one closing `"` at the end of the last line.
 - If your shell shows `heredoc>` or `dquote>`, press `Ctrl+C` and re-run the command exactly.
 
 ## 3. Tune Logging and Progress
@@ -277,7 +288,7 @@ done
 4. Dataset endpoint `404`
 - The dataset may not be in current public-reports catalog for your account.
 - Check available IDs with:
-`make download DOWNLOAD_ARGS="--list-api-products"`
+`make download DOWNLOAD_FLAGS="--list-api-products"`
 
 ## 7. Diagnose DNS with Verbose Logging
 

@@ -2,16 +2,18 @@
 
 PYTHON ?= python3
 SCRIPT ?= scripts/download_ercot_public_reports.py
-CONFIG ?= config/download.yaml
 LOGS_DIR ?= logs/downloads
 STATE_DIR ?= state
-DOWNLOAD_ARGS ?=
 AS_OF ?=
 EST_DATASET ?=
 
+# Download target variables
+DOWNLOAD_CONFIG ?= config/download.yaml
+DOWNLOAD_FLAGS ?=
+
 help:
 	@echo "Available targets:"
-	@echo "  make download        Run downloader with --config (default: config/download.yaml)"
+	@echo "  make download        Run downloader with --config (default: DOWNLOAD_CONFIG=config/download.yaml)"
 	@echo "  make last-run        Show latest run summary/log/failures from logs/downloads"
 	@echo "  make resume-status   Show per-dataset checkpoint status from state/*.json"
 	@echo "  make estimate-time   Estimate per-dataset total download time from logs + local fallback"
@@ -19,8 +21,8 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make download"
-	@echo "  make download CONFIG=config/download.sample.yaml"
-	@echo "  make download DOWNLOAD_ARGS='--datasets-only --dataset NP4-188-CD --dataset NP4-523-CD --from-date 2025-11-01 --to-date 2025-12-31'"
+	@echo "  make download DOWNLOAD_CONFIG=config/download.sample.yaml"
+	@echo "  make download DOWNLOAD_FLAGS='--datasets-only --dataset NP4-188-CD --dataset NP4-523-CD --from-date 2025-11-01 --to-date 2025-12-31'"
 	@echo "  make estimate-time"
 	@echo "  make estimate-time AS_OF=2026-02-21"
 	@echo "  make estimate-time EST_DATASET=NP6-346-CD"
@@ -29,14 +31,14 @@ help:
 	@echo "  make estimate-size EST_DATASET=NP6-346-CD"
 
 download:
-	@if [ ! -f "$(CONFIG)" ]; then \
-		echo "Config not found: $(CONFIG)"; \
+	@if [ ! -f "$(DOWNLOAD_CONFIG)" ]; then \
+		echo "Config not found: $(DOWNLOAD_CONFIG)"; \
 		echo "Create one from sample:"; \
 		echo "  cp config/download.sample.yaml config/download.yaml"; \
 		exit 1; \
 	fi; \
-	echo "Running downloader with config: $(CONFIG)"; \
-	$(PYTHON) $(SCRIPT) --config "$(CONFIG)" $(DOWNLOAD_ARGS)
+	echo "Running downloader with config: $(DOWNLOAD_CONFIG)"; \
+	$(PYTHON) $(SCRIPT) --config "$(DOWNLOAD_CONFIG)" $(DOWNLOAD_FLAGS)
 
 last-run:
 	@latest="$$(find "$(LOGS_DIR)" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"; \

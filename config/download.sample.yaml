@@ -13,8 +13,12 @@ download:
     - NP4-732-CD
     - NP4-745-CD
     - NP3-233-CD
-  from_date: "2025-09-01"
-  window_months: 2
+  # Default date range in downloader code:
+  # from_date: 2016-01-01, to_date: 2025-12-31
+  # Keep this aligned with that default.
+  from_date: "2016-01-01"
+  # Optional explicit end date override:
+  # to_date: "2025-12-31"
   outdir: "data/raw/ercot"
   consolidate_monthly: true
   delete_source_after_consolidation: true

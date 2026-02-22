@@ -1,11 +1,12 @@
 # ERCOT Data Estimation and Download Planning
 
 Use this document for dataset-selection planning:
-- how much data (storage) to expect
+- what to download
+- how much storage to expect
 - how long downloads may take
 - what `--from-date` to choose for budget/time targets
 
-Use `DATA_DOWNLOAD.md` for operational run commands and troubleshooting.
+Use `DATA_DOWNLOAD.md` for download commands and troubleshooting.
 
 Current snapshot:
 - As-of horizon for latest tables: `2026-02-22`
@@ -15,27 +16,27 @@ Current snapshot:
 
 ## Table of Contents
 
-0. [Discussion-First Decision Flow](#discussion-first-decision-flow)
-1. [Inputs and Scope](#1-inputs-and-scope)
-2. [Coverage Snapshot (Historical Audit)](#2-coverage-snapshot-historical-audit)
-3. [Time Estimate (Log-and-Fallback Method)](#3-time-estimate-log-and-fallback-method)
-4. [Size Estimate (Monthly-to-Daily Method)](#4-size-estimate-monthly-to-daily-method)
-5. [Planning Scenarios (`<=10GB`, `<=50h`)](#5-planning-scenarios-10gb-50h)
-6. [Dataset Summary (Capped at End of Jan 2026)](#6-dataset-summary-capped-at-end-of-jan-2026)
-7. [How to Refresh Estimates](#7-how-to-refresh-estimates)
+- [Decision Flow](#decision-flow)
+- [Inputs and Scope](#1-inputs-and-scope)
+- [Coverage Snapshot (Historical Audit)](#2-coverage-snapshot-historical-audit)
+- [Time Estimate (Log-and-Fallback Method)](#3-time-estimate-log-and-fallback-method)
+- [Size Estimate (Monthly-to-Daily Method)](#4-size-estimate-monthly-to-daily-method)
+- [Planning Scenarios (`<=10GB`, `<=50h`)](#5-planning-scenarios-10gb-50h)
+- [Dataset Summary (Capped at End of Jan 2026)](#6-dataset-summary-capped-at-end-of-jan-2026)
+- [How to Refresh Estimates](#7-how-to-refresh-estimates)
 
-## Discussion-First Decision Flow
+## Decision Flow
 
-Use this section as the team discussion guide before final download.
+Use this section to align the team before final download decisions.
 
-Meeting output checklist:
+Discussion checklist:
 1. Pick one primary question and one backup question.
 2. Fix one analysis interval for first pass (recommended: hourly).
 3. Fix start and end date for training.
 4. Choose 5-7 datasets that directly support the primary question.
 5. Assign parallel non-overlapping downloads by dataset.
 
-Question template (fill this first):
+Question template:
 - Goal: what decision or insight do we want?
 - Target variable: what are we predicting/explaining?
 - Forecast horizon: same hour, 1-hour ahead, day-ahead, etc.
@@ -70,7 +71,7 @@ Candidate analysis directions:
 - Minimum datasets: `NP3-233-CD`, `NP6-346-CD`, `NP4-523-CD`
 - Optional: `NP6-331-CD`, `NP6-905-CD`
 
-Recommended first milestone:
+Recommended first pass:
 1. Start with one hourly system-wide question.
 2. Use a smaller dataset set first to validate cleaning + merge + baseline model.
 3. Add heavier price datasets only after pipeline is stable.
@@ -134,7 +135,7 @@ Method (as-of `2026-02-22`):
 - Projection:
 `estimated_total_hours = mean_sec_per_day * historical_days / 3600`.
 
-Important:
+Notes:
 - This removes most `N/A` time rows when logs are sparse.
 - `NP3-912-ER` is excluded from this table until earliest availability is resolved.
 
@@ -188,9 +189,9 @@ Total estimated size across estimable datasets: `58.63 GB`.
 
 ## 5. Planning Scenarios (`<=10GB`, `<=50h`)
 
-These planning numbers are for quick team scoping.
+Use these planning numbers for quick planning.
 
-Important clarification:
+Note:
 - Converting `15-minute` data to hourly helps analysis/storage, but does **not** speed up API download.
 
 Fastest levers for download speed:

@@ -10,7 +10,11 @@
 # Only track consolidated monthly outputs for this dataset.
 !/data/raw/ercot/NP6-346-CD/**/*.csv
 !/data/raw/ercot/NP6-346-CD/**/*.csv.docids
+# Do not upload 2026 raw data files (applies to all datasets, including NP6-346-CD).
+/data/raw/ercot/**/2026/**/*.csv
+/data/raw/ercot/**/2026/**/*.csv.docids
 *.log
+.DS_Store
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/

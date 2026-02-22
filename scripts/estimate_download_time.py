@@ -35,16 +35,16 @@ DAY_COMPLETE_RE = re.compile(
 DATE_COLUMN_CANDIDATES: Dict[str, Sequence[str]] = {
     "NP6-346-CD": ("OperDay",),
     "NP6-905-CD": ("DeliveryDate",),
-    "NP4-732-CD": ("DELIVERY_DATE",),
+    "NP4-732-CD": ("DELIVERY_DATE", "DeliveryDate", "HOUR_ENDING", "HourEnding", "Date"),
     "NP4-745-CD": ("DELIVERY_DATE",),
-    "NP3-233-CD": ("DeliveryDate", "OperDay"),
+    "NP3-233-CD": ("DeliveryDate", "OperDay", "Date"),
     "NP3-565-CD": ("DeliveryDate",),
     "NP4-523-CD": ("DeliveryDate", "OperDay"),
-    "NP6-788-CD": ("DeliveryDate", "OperDay"),
+    "NP6-788-CD": ("DeliveryDate", "OperDay", "SCEDTimestamp", "SCEDTimestampGMT", "Date"),
     "NP6-331-CD": ("DeliveryDate", "OperDay"),
-    "NP4-188-CD": ("DeliveryDate", "OperDay"),
-    "NP3-911-ER": ("DeliveryDate", "OperDay"),
-    "NP3-912-ER": ("DeliveryDate", "OperDay"),
+    "NP4-188-CD": ("DeliveryDate", "OperDay", "Date"),
+    "NP3-911-ER": ("DeliveryDate", "OperDay", "Date"),
+    "NP3-912-ER": ("DeliveryDate", "OperDay", "Date"),
 }
 
 
@@ -226,7 +226,10 @@ def estimate_from_mtime_and_days(
     if span_seconds <= 0:
         return None
 
-    candidates = DATE_COLUMN_CANDIDATES.get(dataset_id, ("DeliveryDate", "OperDay"))
+    candidates = DATE_COLUMN_CANDIDATES.get(
+        dataset_id,
+        ("DeliveryDate", "OperDay", "Date", "SCEDTimestamp", "DELIVERY_DATE", "HOUR_ENDING"),
+    )
     covered_days: set[date] = set()
     for path in csv_files:
         try:
@@ -325,6 +328,64 @@ def main() -> None:
     rows: List[Dict[str, str]] = []
     total_hours = 0.0
     any_estimate = False
+    preliminary_estimates: Dict[str, Optional[Estimate]] = {}
+    missing_notes: Dict[str, str] = {}
+    global_fallback_stats: Optional[tuple[float, float, int]] = None
+
+    for dataset_id in selected_ids:
+        if dataset_id not in EARLIEST_BY_DATASET:
+            continue
+        earliest = EARLIEST_BY_DATASET[dataset_id]
+        if earliest is None:
+            continue
+
+        day_samples = intervals.get(dataset_id, [])
+        estimate: Optional[Estimate] = None
+        if len(day_samples) >= args.min_day_samples:
+            estimate = Estimate(
+                mean_sec_per_day=mean(day_samples),
+                std_sec_per_day=pstdev(day_samples) if len(day_samples) > 1 else 0.0,
+                sample_intervals=len(day_samples),
+                source="log-daily",
+                note="from DAY COMPLETE run logs",
+            )
+        elif args.fallback_from_mtime:
+            estimate = estimate_from_mtime_and_days(
+                data_root=data_root,
+                dataset_id=dataset_id,
+                min_covered_days=args.fallback_min_covered_days,
+            )
+
+        preliminary_estimates[dataset_id] = estimate
+        if estimate is None:
+            fallback_note = (
+                f"log={len(day_samples)} (<{args.min_day_samples}); "
+                "mtime fallback unavailable"
+                if args.fallback_from_mtime
+                else f"log={len(day_samples)} (<{args.min_day_samples}); fallback disabled"
+            )
+            missing_notes[dataset_id] = fallback_note
+
+    candidate_means = [
+        estimate.mean_sec_per_day
+        for estimate in preliminary_estimates.values()
+        if estimate is not None
+    ]
+    if candidate_means:
+        fallback_mean = mean(candidate_means)
+        fallback_std = pstdev(candidate_means) if len(candidate_means) > 1 else 0.0
+        global_fallback_stats = (fallback_mean, fallback_std, len(candidate_means))
+        for dataset_id, estimate in preliminary_estimates.items():
+            if estimate is not None:
+                continue
+            reason = missing_notes.get(dataset_id, "insufficient local timing samples")
+            preliminary_estimates[dataset_id] = Estimate(
+                mean_sec_per_day=fallback_mean,
+                std_sec_per_day=fallback_std,
+                sample_intervals=len(candidate_means),
+                source="global-fallback",
+                note=f"mean across {len(candidate_means)} datasets; {reason}",
+            )
 
     for dataset_id in selected_ids:
         if dataset_id not in EARLIEST_BY_DATASET:
@@ -364,28 +425,17 @@ def main() -> None:
             hist_days = inclusive_days(earliest, args.as_of)
 
         day_samples = intervals.get(dataset_id, [])
-        estimate: Optional[Estimate] = None
-        if len(day_samples) >= args.min_day_samples:
-            estimate = Estimate(
-                mean_sec_per_day=mean(day_samples),
-                std_sec_per_day=pstdev(day_samples) if len(day_samples) > 1 else 0.0,
-                sample_intervals=len(day_samples),
-                source="log-daily",
-                note="from DAY COMPLETE run logs",
-            )
-        elif args.fallback_from_mtime:
-            estimate = estimate_from_mtime_and_days(
-                data_root=data_root,
-                dataset_id=dataset_id,
-                min_covered_days=args.fallback_min_covered_days,
-            )
+        estimate = preliminary_estimates.get(dataset_id)
 
         if estimate is None:
-            fallback_note = (
-                f"log={len(day_samples)} (<{args.min_day_samples}); "
-                "mtime fallback unavailable"
-                if args.fallback_from_mtime
-                else f"log={len(day_samples)} (<{args.min_day_samples}); fallback disabled"
+            fallback_note = missing_notes.get(
+                dataset_id,
+                (
+                    f"log={len(day_samples)} (<{args.min_day_samples}); "
+                    "mtime fallback unavailable"
+                    if args.fallback_from_mtime
+                    else f"log={len(day_samples)} (<{args.min_day_samples}); fallback disabled"
+                ),
             )
             rows.append(
                 {
@@ -425,6 +475,18 @@ def main() -> None:
     print("")
     if any_estimate:
         print(f"Total estimated hours (datasets with enough samples): {total_hours:.2f}")
+        if global_fallback_stats is not None:
+            fallback_mean, fallback_std, fallback_count = global_fallback_stats
+            used_global_fallback = any(
+                estimate is not None and estimate.source == "global-fallback"
+                for estimate in preliminary_estimates.values()
+            )
+            if used_global_fallback:
+                print(
+                    "Global fallback applied: "
+                    f"{fallback_mean:.2f} sec/day mean across {fallback_count} datasets "
+                    f"(sd {fallback_std:.2f})."
+                )
     else:
         print(
             "No dataset had enough timing samples for estimation. "

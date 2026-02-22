@@ -1,10 +1,10 @@
-# Git Terminal Pipeline (Beginner-Friendly)
+# Git Terminal Pipeline
 
-Use this as a step-by-step pipeline from starting work to merging safely.
+Use this guide as a step-by-step workflow from starting work to merging safely.
 
 ## 1) Plain-Language Mental Model
 
-Think of Git like shared writing with version history:
+Use this plain-language model:
 - Your laptop has a copy of the project.
 - GitHub has the shared team copy.
 - A branch is your private draft line of work.
@@ -273,7 +273,7 @@ git rebase --continue
 git push origin <branch>
 ```
 
-If rebase becomes messy and you want to stop:
+If you want to stop a rebase:
 
 ```bash
 git rebase --abort
@@ -440,7 +440,7 @@ Run without global install:
 npx @google/gemini-cli
 ```
 
-### C) Quick checks if command fails
+### C) Quick checks if a command fails
 
 ```bash
 codex --version

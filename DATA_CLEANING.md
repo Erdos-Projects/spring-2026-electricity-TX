@@ -1,8 +1,8 @@
 # ERCOT Data Cleaning Runbook
 
-Use this runbook after raw downloads are complete.
+Use this runbook to clean raw downloads into analysis-ready outputs.
 
-Goal:
+Purpose:
 - Convert raw monthly CSVs into analysis-ready tables.
 - Keep output consistent (same timestamp rules, same column names).
 - Avoid merge conflicts when cleaning in parallel.
@@ -18,7 +18,7 @@ Goal:
 7. [Validate Outputs](#7-validate-outputs)
 8. [Build EDA Merge Table (Hourly Master)](#8-build-eda-merge-table-hourly-master)
 9. [Parallelize Cleaning Safely](#9-parallelize-cleaning-safely)
-10. [Take Next Step](#10-take-next-step)
+10. [Next Step](#10-next-step)
 
 ---
 
@@ -64,7 +64,7 @@ Rules:
 
 Use this table to set deduplication keys in cleaned outputs.
 
-For frequency and earliest-date reference, use `DATA_DOWNLOAD_RUNBOOK.md` Section 4.
+For frequency and earliest-date reference, use `DATA_ESTIMATION.md` Section 1.
 
 | Dataset ID | Data type | Recommended unique key for dedupe |
 |---|---|---|
@@ -119,7 +119,7 @@ Create an interval-start timestamp:
 ```python
 import pandas as pd
 
-df = pd.read_csv("data/raw/ercot/NP6-905-CD/2026/02/NP6-905-CD_202602.csv")
+df = pd.read_csv("data/raw/ercot/NP6-905-CD/2025/12/NP6-905-CD_202512.csv")
 
 d = pd.to_datetime(df["DeliveryDate"], format="%m/%d/%Y")
 he = df["DeliveryHour"].astype(int)          # 1..24
@@ -341,7 +341,7 @@ git checkout -b clean/<dataset-or-owner>
 4. Commit only assigned outputs + code/notebook changes:
 
 ```bash
-git add DATA_CLEANING_RUNBOOK.md scripts/ data/processed/ercot/<ASSIGNED_DATASET>/
+git add DATA_CLEANING.md scripts/ data/processed/ercot/<ASSIGNED_DATASET>/
 git commit -m "Clean <ASSIGNED_DATASET> and add validation outputs"
 git push -u origin clean/<dataset-or-owner>
 ```
@@ -351,6 +351,6 @@ git push -u origin clean/<dataset-or-owner>
 
 ---
 
-## 10. Take Next Step
+## 10. Next Step
 
 Create one small cleaning script per dataset in `scripts/cleaning/` so processing is reproducible without notebook-only logic.

@@ -137,25 +137,26 @@ Method (as-of `2026-02-22`):
 
 Notes:
 - This removes most `N/A` time rows when logs are sparse.
-- `NP3-912-ER` is excluded from this table until earliest availability is resolved.
+- `NP3-912-ER` appears as unresolved when no confirmed earliest date is available.
 
-Latest time estimate snapshot (run on `2026-02-22`):
+Latest time estimate snapshot (run on `2026-02-22`, as-of `2026-02-21`):
 
-| Dataset ID | Earliest Date | Historical Days (to 2026-02-22) | Mean Sec/Day | Sample Day Intervals | Source | Estimated Total Hours | Estimated Total Days | Notes |
+| Dataset ID | Earliest Date | Historical Days (to 2026-02-21) | Mean Sec/Day | Sample Day Intervals | Source | Estimated Total Hours | Estimated Total Days | Notes |
 |---|---|---|---|---|---|---|---|---|
-| `NP3-233-CD` | 2014-08-08 | 4,217 | 150.11 (sd 0.00) | 119 | fallback-mtime | 175.83 | 7.33 | covered_days=120, csv_files=4 |
-| `NP3-565-CD` | 2014-08-08 | 4,217 | 64.28 (sd 0.00) | 339 | fallback-mtime | 75.30 | 3.14 | covered_days=340, csv_files=12 |
-| `NP3-911-ER` | 2025-04-04 | 325 | 2.00 (sd 0.00) | 5 | log-daily | 0.18 | 0.01 | from DAY COMPLETE run logs |
-| `NP4-188-CD` | 2015-03-26 | 3,987 | 2.07 (sd 0.25) | 29 | log-daily | 2.29 | 0.10 | from DAY COMPLETE run logs |
-| `NP4-523-CD` | 2015-03-26 | 3,987 | 2.11 (sd 0.31) | 18 | log-daily | 2.34 | 0.10 | from DAY COMPLETE run logs |
-| `NP4-732-CD` | 2014-08-17 | 4,208 | 681.39 (sd 0.00) | 208 | fallback-mtime | 796.47 | 33.19 | covered_days=209, csv_files=9 |
-| `NP4-745-CD` | 2016-03-12 | 3,635 | 42.02 (sd 0.00) | 667 | fallback-mtime | 42.43 | 1.77 | covered_days=668, csv_files=22 |
-| `NP6-331-CD` | 2015-03-26 | 3,987 | 201.17 (sd 1.29) | 30 | log-daily | 222.79 | 9.28 | from DAY COMPLETE run logs |
-| `NP6-346-CD` | 2014-06-19 | 4,267 | 52.47 (sd 0.00) | 3155 | fallback-mtime | 62.19 | 2.59 | covered_days=3156, csv_files=105 |
-| `NP6-788-CD` | 2015-03-26 | 3,987 | 65.51 (sd 0.00) | 26 | fallback-mtime | 72.55 | 3.02 | covered_days=27, csv_files=2 |
-| `NP6-905-CD` | 2014-05-01 | 4,316 | 344.06 (sd 0.00) | 181 | fallback-mtime | 412.50 | 17.19 | covered_days=182, csv_files=7 |
+| `NP3-233-CD` | 2014-08-08 | 4,216 | 150.11 (sd 0.00) | 119 | fallback-mtime | 175.79 | 7.32 | covered_days=120, csv_files=4 |
+| `NP3-565-CD` | 2014-08-08 | 4,216 | 64.28 (sd 0.00) | 339 | fallback-mtime | 75.28 | 3.14 | covered_days=340, csv_files=12 |
+| `NP3-911-ER` | 2025-04-04 | 324 | 2.00 (sd 0.00) | 5 | log-daily | 0.18 | 0.01 | from DAY COMPLETE run logs |
+| `NP3-912-ER` | unresolved | N/A | N/A | N/A | N/A | N/A | N/A | earliest date unresolved |
+| `NP4-188-CD` | 2015-03-26 | 3,986 | 2.00 (sd 0.25) | 29 | log-daily | 2.21 | 0.09 | from DAY COMPLETE run logs |
+| `NP4-523-CD` | 2015-03-26 | 3,986 | 2.00 (sd 0.31) | 18 | log-daily | 2.21 | 0.09 | from DAY COMPLETE run logs |
+| `NP4-732-CD` | 2014-08-17 | 4,207 | 681.39 (sd 0.00) | 208 | fallback-mtime | 796.29 | 33.18 | covered_days=209, csv_files=9 |
+| `NP4-745-CD` | 2016-03-12 | 3,634 | 42.02 (sd 0.00) | 667 | fallback-mtime | 42.42 | 1.77 | covered_days=668, csv_files=22 |
+| `NP6-331-CD` | 2015-03-26 | 3,986 | 201.00 (sd 1.29) | 30 | log-daily | 222.55 | 9.27 | from DAY COMPLETE run logs |
+| `NP6-346-CD` | 2014-06-19 | 4,266 | 52.47 (sd 0.00) | 3155 | fallback-mtime | 62.17 | 2.59 | covered_days=3156, csv_files=105 |
+| `NP6-788-CD` | 2015-03-26 | 3,986 | 168.44 (sd 0.00) | 32 | fallback-mtime | 186.50 | 7.77 | covered_days=33, csv_files=2 |
+| `NP6-905-CD` | 2014-05-01 | 4,315 | 344.06 (sd 0.00) | 181 | fallback-mtime | 412.40 | 17.18 | covered_days=182, csv_files=7 |
 
-Total estimated hours (datasets with enough samples): `1864.87` (`77.70` days).
+Total estimated hours (datasets with enough samples): `1978.01` (`82.42` days).
 Global fallback was not used in this snapshot.
 
 ## 4. Size Estimate (Monthly-to-Daily Method)
@@ -242,21 +243,26 @@ Method notes:
 - `Estimated Avg Monthly File Size` and `Estimated Total Download Size` use local monthly CSV files up to `2026-01`.
 - `Estimated Total Download Time` uses the current log-and-fallback time model, with projection capped at `2026-01-31`.
 - `NP3-912-ER` is excluded from this table until earliest date/endpoint is confirmed.
-- `Estimated Avg Monthly File Download Time` is computed from estimated sec/day times average days/month of observed monthly files.
+- `Estimated Avg Monthly File Download Time` is computed from estimated mean sec/day times average days/month of observed monthly files.
 
-| Dataset ID | Priority | Frequency | Earliest Date | Estimated Avg Monthly File Size | Estimated Avg Monthly File Download Time | Estimated Total Download Size (to 2026-01-31) | Estimated Total Download Time (to 2026-01-31) | Notes |
-|---|---|---|---|---|---|---|---|---|
-| `NP3-233-CD` | 1 | Hourly | 2014-08-08 | 9.34 MB | 1.28 h | 1.25 GB | 174.92 h | time_source=fallback-mtime |
-| `NP3-565-CD` | 2 | Hourly | 2014-08-08 | 132.28 MB | 0.55 h | 17.76 GB | 74.91 h | time_source=fallback-mtime |
-| `NP3-911-ER` | 3 | Hourly/report-specific | 2025-04-04 | 45.93 KB | 0.02 h | 448.97 KB | 0.17 h | time_source=log-daily |
-| `NP4-188-CD` | 3 | Hourly/market detail | 2015-03-26 | 108.70 KB | 0.02 h | 13.58 MB | 2.28 h | time_source=log-daily |
-| `NP4-523-CD` | 2 | Hourly | 2015-03-26 | 19.89 KB | 0.02 h | 2.51 MB | 2.33 h | time_source=log-daily |
-| `NP4-732-CD` | 1 | Hourly | 2014-08-17 | 10.66 MB | 5.77 h | 1.42 GB | 792.31 h | time_source=fallback-mtime |
-| `NP4-745-CD` | 1 | Hourly | 2016-03-12 | 18.88 MB | 0.36 h | 2.18 GB | 42.17 h | time_source=fallback-mtime |
-| `NP6-331-CD` | 3 | 15-minute | 2015-03-26 | 209.98 KB | 1.73 h | 26.23 MB | 221.56 h | time_source=log-daily |
-| `NP6-346-CD` | 1 | Hourly | 2014-06-19 | 44.30 KB | 0.44 h | 6.03 MB | 61.87 h | time_source=fallback-mtime |
-| `NP6-788-CD` | 2 | Interval/market detail | 2015-03-26 | 313.25 MB | 0.36 h | 39.13 GB | 46.27 h | time_source=fallback-mtime |
-| `NP6-905-CD` | 1 | 15-minute | 2014-05-01 | 101.81 MB | 2.93 h | 13.94 GB | 410.39 h | time_source=fallback-mtime |
+Time source legend:
+- `time_source=log-daily`: estimate comes from `DAY COMPLETE` events in `logs/downloads/*/run.log`.
+- `time_source=fallback-mtime`: estimate comes from local CSV file modification-time span divided by covered-day intervals when log-daily samples are insufficient.
+- `time_source=global-fallback`: estimate uses the mean sec/day across datasets with valid estimates (only used if both methods above are unavailable).
+
+| Dataset ID | Data Type | Priority | Frequency | Earliest Date | Estimated Avg Monthly File Size | Estimated Avg Monthly File Download Time | Estimated Total Download Size (to 2026-01-31) | Estimated Total Download Time (to 2026-01-31) | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| `NP3-233-CD` | Reliability | 1 | Hourly | 2014-08-08 | 9.34 MB | 1.25 h | 1.25 GB | 174.92 h | time_source=fallback-mtime |
+| `NP3-565-CD` | Load forecast | 2 | Hourly | 2014-08-08 | 132.28 MB | 0.54 h | 17.76 GB | 74.90 h | time_source=fallback-mtime |
+| `NP3-911-ER` | Renewable detail | 3 | Hourly/report-specific | 2025-04-04 | 45.93 KB | 0.02 h | 448.97 KB | 0.17 h | time_source=log-daily |
+| `NP4-188-CD` | Ancillary prices (DA) | 3 | Hourly/market detail | 2015-03-26 | 108.70 KB | 0.02 h | 13.58 MB | 2.20 h | time_source=log-daily |
+| `NP4-523-CD` | Price (DA) | 2 | Hourly | 2015-03-26 | 19.89 KB | 0.02 h | 2.51 MB | 2.20 h | time_source=log-daily |
+| `NP4-732-CD` | Renewable (wind) | 1 | Hourly | 2014-08-17 | 10.66 MB | 5.72 h | 1.42 GB | 792.31 h | time_source=fallback-mtime |
+| `NP4-745-CD` | Renewable (solar) | 1 | Hourly | 2016-03-12 | 18.88 MB | 0.36 h | 2.18 GB | 42.17 h | time_source=fallback-mtime |
+| `NP6-331-CD` | Ancillary prices (RT) | 3 | 15-minute | 2015-03-26 | 209.98 KB | 1.68 h | 26.23 MB | 221.38 h | time_source=log-daily |
+| `NP6-346-CD` | Load (actual) | 1 | Hourly | 2014-06-19 | 44.30 KB | 0.44 h | 6.03 MB | 61.87 h | time_source=fallback-mtime |
+| `NP6-788-CD` | Price (LMP detail) | 2 | Interval/market detail | 2015-03-26 | 313.25 MB | 1.38 h | 39.13 GB | 185.52 h | time_source=fallback-mtime |
+| `NP6-905-CD` | Price (settlement) | 1 | 15-minute | 2014-05-01 | 101.81 MB | 2.93 h | 13.94 GB | 410.39 h | time_source=fallback-mtime |
 
 ## 7. How to Refresh Estimates
 

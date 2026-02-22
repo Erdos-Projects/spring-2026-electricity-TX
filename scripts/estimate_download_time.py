@@ -13,17 +13,17 @@ from statistics import mean, pstdev
 from typing import Dict, List, Optional, Sequence
 
 EARLIEST_BY_DATASET: Dict[str, Optional[date]] = {
-    "NP6-346-CD": date(2014, 6, 19),
-    "NP6-905-CD": date(2014, 5, 1),
-    "NP4-732-CD": date(2014, 8, 17),
-    "NP4-745-CD": date(2016, 3, 12),
-    "NP3-233-CD": date(2014, 8, 8),
-    "NP3-565-CD": date(2014, 8, 8),
-    "NP4-523-CD": date(2015, 3, 26),
-    "NP6-788-CD": date(2015, 3, 26),
-    "NP6-331-CD": date(2015, 3, 26),
-    "NP4-188-CD": date(2015, 3, 26),
-    "NP3-911-ER": date(2025, 4, 4),
+    "NP6-346-CD": date(2017, 6, 29),
+    "NP6-905-CD": date(2010, 11, 30),
+    "NP4-732-CD": date(2010, 11, 28),
+    "NP4-745-CD": date(2022, 6, 30),
+    "NP3-233-CD": date(2013, 10, 20),
+    "NP3-565-CD": date(2017, 6, 28),
+    "NP4-523-CD": date(2013, 12, 11),
+    "NP6-788-CD": date(2010, 11, 30),
+    "NP6-331-CD": date(2025, 12, 5),
+    "NP4-188-CD": date(2010, 11, 29),
+    "NP3-911-ER": date(2011, 1, 29),
     "NP3-912-ER": None,
 }
 

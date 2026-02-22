@@ -15,7 +15,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import requests
@@ -40,6 +40,8 @@ DEFAULT_CLIENT_ID = "fec253ea-0d06-4272-a5e6-b478baeecd70"
 DEFAULT_SCOPE = f"openid {DEFAULT_CLIENT_ID} offline_access"
 EARLIEST_ARCHIVE_FROM = date(2000, 1, 1)
 DEFAULT_TO_DATE = date(2025, 12, 31)
+DEFAULT_RANGE_YEARS = 10
+DEFAULT_FROM_DATE = date(DEFAULT_TO_DATE.year - DEFAULT_RANGE_YEARS + 1, 1, 1)
 
 
 @dataclass
@@ -151,6 +153,13 @@ def _coerce_config_list(value: object, key: str) -> List[str]:
 def config_to_parser_defaults(config_data: Dict[str, Any]) -> Dict[str, Any]:
     cfg = flatten_config(config_data)
     defaults: Dict[str, Any] = {}
+    removed_date_keys = [
+        key
+        for key in ("window_months", "download_window_months", "time_duration", "download_time_duration")
+        if key in cfg
+    ]
+    if removed_date_keys:
+        raise SystemExit("Deprecated date-range keys are not supported. Use from_date and optional to_date only.")
     scalar_map = {
         "username": "username",
         "credentials_username": "username",
@@ -201,8 +210,6 @@ def config_to_parser_defaults(config_data: Dict[str, Any]) -> Dict[str, Any]:
         "auth_client_id": "client_id",
         "scope": "scope",
         "auth_scope": "scope",
-        "window_months": "window_months",
-        "download_window_months": "window_months",
         "state_dir": "state_dir",
         "resume_state_dir": "state_dir",
         "logs_dir": "logs_dir",
@@ -436,21 +443,6 @@ def cli_repeatable_values(argv: Sequence[str], flag: str) -> List[str]:
                 values.append(value)
         index += 1
     return values
-
-
-def add_months(value: date, months: int) -> date:
-    if months <= 0:
-        raise ValueError("months must be greater than 0")
-    month_index = (value.year * 12 + value.month - 1) + months
-    year = month_index // 12
-    month = month_index % 12 + 1
-    day = min(value.day, calendar.monthrange(year, month)[1])
-    return date(year, month, day)
-
-
-def window_end_date(window_start: date, months: int) -> date:
-    # Inclusive window end: start 2025-11-01 with 3 months -> 2026-01-31.
-    return add_months(window_start, months) - timedelta(days=1)
 
 
 def to_start_iso(value: date) -> str:
@@ -1398,8 +1390,7 @@ def sort_monthly_csv(path: Path, sort_order: str) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    today = date.today()
-    default_from = today - timedelta(days=30)
+    default_from = DEFAULT_FROM_DATE
 
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("--config", help="Path to YAML/JSON config file.")
@@ -1416,27 +1407,21 @@ def parse_args() -> argparse.Namespace:
         "--subscription-key",
         help="API subscription key. Falls back to ERCOT_SUBSCRIPTION_KEY.",
     )
-    parser.add_argument("--from-date", type=parse_date, default=default_from, help="Start date (YYYY-MM-DD).")
+    parser.add_argument(
+        "--from-date",
+        type=parse_date,
+        default=default_from,
+        help=(
+            "Start date (YYYY-MM-DD). "
+            f"Defaults to {default_from.isoformat()} "
+            f"(10-year default range ending {DEFAULT_TO_DATE.isoformat()})."
+        ),
+    )
     parser.add_argument(
         "--to-date",
         type=parse_date,
         default=None,
-        help=(
-            f"End date (YYYY-MM-DD). If omitted, defaults to {DEFAULT_TO_DATE.isoformat()}. "
-            "When --window-months is set and --to-date is omitted, "
-            f"end date is auto-calculated and capped at {DEFAULT_TO_DATE.isoformat()}. "
-            "If --to-date is explicitly provided, it is used as-is."
-        ),
-    )
-    parser.add_argument(
-        "--window-months",
-        type=int,
-        choices=(1, 2, 3, 6, 12),
-        default=0,
-        help=(
-            "Auto-calculate end date from --from-date using an inclusive N-month window "
-            "(1, 2, 3, 6, or 12 months). Ignored when --to-date is explicitly set."
-        ),
+        help=f"End date (YYYY-MM-DD). If omitted, defaults to {DEFAULT_TO_DATE.isoformat()}.",
     )
     parser.add_argument(
         "--from-earliest-available",
@@ -1691,22 +1676,7 @@ def main() -> None:
         if args.from_earliest_available:
             args.from_date = EARLIEST_ARCHIVE_FROM
             print(f"Using earliest-available mode: --from-date set to {args.from_date.isoformat()}")
-        if args.window_months > 0:
-            calculated_to_date = window_end_date(args.from_date, args.window_months)
-            if args.to_date is None:
-                args.to_date = min(calculated_to_date, DEFAULT_TO_DATE)
-                print(
-                    "Using window-months mode: "
-                    f"--to-date auto-set to {args.to_date.isoformat()} "
-                    f"(window={args.window_months} month(s), cap={DEFAULT_TO_DATE.isoformat()})"
-                )
-            else:
-                print(
-                    "Using explicit --to-date override: "
-                    f"--to-date kept at {args.to_date.isoformat()} "
-                    f"(window={args.window_months} month(s), computed window end={calculated_to_date.isoformat()} ignored)"
-                )
-        elif args.to_date is None:
+        if args.to_date is None:
             args.to_date = DEFAULT_TO_DATE
         if args.from_date > args.to_date:
             raise SystemExit("--from-date must be on or before --to-date.")
@@ -2010,7 +1980,7 @@ def main() -> None:
                 if args.resume_state:
                     dataset_state["status"] = "completed"
                     save_dataset_state(dataset_state_path, dataset_state)
-                print("No archive docs in this date window.")
+                print("No archive docs in this date range.")
                 continue
             if args.download_order != "api":
                 print(

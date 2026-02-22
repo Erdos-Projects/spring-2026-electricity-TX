@@ -18,7 +18,7 @@ Scope:
 ## Table of Contents
 
 1. [Prepare Environment](#1-prepare-environment)
-2. [Run Canonical Download Command (Window-Based)](#2-run-canonical-download-command-window-based)
+2. [Run Canonical Download Command (Date-Range Based)](#2-run-canonical-download-command-date-range-based)
 3. [Tune Logging and Progress](#3-tune-logging-and-progress)
 4. [Select Datasets (Priority + Usage)](#4-select-datasets-priority--usage)
 5. [Makefile Shortcuts](#5-makefile-shortcuts)
@@ -95,7 +95,7 @@ Optional: list available API product IDs for your account.
 make download DOWNLOAD_ARGS="--list-api-products"
 ```
 
-## 2. Run Canonical Download Command (Window-Based)
+## 2. Run Canonical Download Command (Date-Range Based)
 
 One-time setup:
 
@@ -104,13 +104,17 @@ mkdir -p config
 cp config/download.sample.yaml config/download.yaml
 ```
 
+After copy, the default date range is:
+- `from_date: 2016-01-01` (10-year default range)
+- `to_date: 2025-12-31` (script default when `--to-date` is omitted)
+
 If credentials are exported in terminal (`ERCOT_API_USERNAME`, `ERCOT_API_PASSWORD`, `ERCOT_SUBSCRIPTION_KEY`), you do not need to put credentials in `config/download.yaml`.
 
 Shared-run rule:
-- Do not include `2026` in download windows for shared runs.
+- Do not include `2026` in shared date ranges.
 - Set `--to-date 2025-12-31` when using explicit start/end ranges.
 
-Default run command (recommended). Edit dataset list, `--from-date`, and `--window-months` each time:
+Default run command (recommended). Edit dataset list and date range each time:
 
 ```bash
 make download DOWNLOAD_ARGS="--datasets-only \
@@ -123,7 +127,7 @@ make download DOWNLOAD_ARGS="--datasets-only \
 --dataset NP4-188-CD \
 --dataset NP3-911-ER \
 --from-date 2025-11-01 \
---window-months 3 \
+--to-date 2025-12-31 \
 --download-order newest-first \
 --archive-progress-pages 10 \
 --file-timing-frequency daily"
@@ -137,7 +141,7 @@ make download DOWNLOAD_ARGS="--datasets-only \
 --dataset NP4-188-CD \
 --dataset NP3-911-ER \
 --from-date 2025-11-01 \
---window-months 3 \
+--to-date 2025-12-31 \
 --file-timing-frequency daily"
 ```
 
@@ -146,23 +150,18 @@ make download DOWNLOAD_ARGS="--datasets-only \
 - If no CLI `--dataset` flags are present, the downloader uses `download.datasets` from `config/download.yaml`.
 
 Date parameters (clear rules):
-1. `--from-date` is required.
-2. Choose one end-date mode: `--to-date` (fixed range) or `--window-months` (relative range).
-3. `--window-months` allowed values are `1`, `2`, `3`, `6`, `12`.
-4. If both `--to-date` and `--window-months` are provided, explicit `--to-date` is used and the window end is ignored.
-5. Window logic is inclusive. Example: `--from-date 2025-11-01 --window-months 3` computes `2026-01-31`; with no explicit `--to-date`, it is capped at `2025-12-31`.
+1. `--from-date` is optional; if omitted, default is `2016-01-01` (10-year default range ending `2025-12-31`).
+2. `--to-date` is optional; if omitted, default is `2025-12-31`.
+3. Download range is inclusive (`from-date` through `to-date`).
 
 Examples:
 
 ```bash
-# Mode A: relative window (from + months)
-make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --window-months 3"
+# Mode A: use default end date (2025-12-31)
+make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01"
 
 # Mode B: fixed range (from + to)
 make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --to-date 2025-12-31"
-
-# Mixed inputs: explicit --to-date wins
-make download DOWNLOAD_ARGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --window-months 3 --to-date 2025-12-31"
 ```
 
 Add these reliability/network flags only when needed:
@@ -172,10 +171,10 @@ Add these reliability/network flags only when needed:
 - `--max-consecutive-network-failures 8 --network-failure-cooldown-seconds 30`
 
 Expected behavior:
-- `--window-months`: computes end date inside the script (inclusive window) and caps at `2025-12-31` if `--to-date` is omitted.
+- `--to-date`: if omitted, defaults to `2025-12-31`.
 - `--download-order newest-first`: download backward in time.
 - `--sort-monthly-output descending`: keep monthly CSV rows newest-to-oldest by timestamp.
-- `--sort-existing-monthly`: sorts only existing monthly CSV files within the active dataset date window.
+- `--sort-existing-monthly`: sorts only existing monthly CSV files within the active dataset date range.
 - `.docids` sidecars prevent duplicate appends on rerun.
 - `--state-dir` + `--resume-state` (default on): writes per-dataset checkpoints in `state/<DATASET>.json`.
 - `--logs-dir`: writes one folder per run with `run.log`, `failures.csv`, and `summary.json`.

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import calendar
 import csv
+import io
 import json
 import os
 import re
@@ -14,6 +15,7 @@ import time
 import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 from urllib.parse import parse_qs, urlparse
@@ -42,6 +44,9 @@ EARLIEST_ARCHIVE_FROM = date(2000, 1, 1)
 DEFAULT_TO_DATE = date(2025, 12, 31)
 DEFAULT_RANGE_YEARS = 10
 DEFAULT_FROM_DATE = date(DEFAULT_TO_DATE.year - DEFAULT_RANGE_YEARS + 1, 1, 1)
+CSV_PARSE_CACHE_SIZE = 262144
+MONTHLY_SORT_CACHE_VERSION = 1
+# TODO(after-full-download): Evaluate storage-format migration (.csv.gz or parquet).
 
 
 @dataclass
@@ -77,6 +82,37 @@ class TeeStream:
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _log_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if value is None:
+        return "null"
+    text = str(value)
+    if re.fullmatch(r"[A-Za-z0-9._:/+\-]+", text):
+        return text
+    return json.dumps(text, ensure_ascii=True)
+
+
+def log_event(event: str, **fields: object) -> None:
+    parts = [event]
+    for key, value in fields.items():
+        parts.append(f"{key}={_log_value(value)}")
+    print(" ".join(parts))
+
+
+def extract_zip_from_memory(byte_data: bytes) -> Dict[str, bytes]:
+    # Read ZIP payload bytes directly from memory.
+    zip_buffer = io.BytesIO(byte_data)
+    with zipfile.ZipFile(zip_buffer) as archive:
+        extracted_content: Dict[str, bytes] = {}
+        for file_name in archive.namelist():
+            with archive.open(file_name) as handle:
+                extracted_content[file_name] = handle.read()
+        return extracted_content
 
 
 def _parse_bool(value: object) -> bool:
@@ -199,6 +235,8 @@ def config_to_parser_defaults(config_data: Dict[str, Any]) -> Dict[str, Any]:
         "download_file_timing_frequency": "file_timing_frequency",
         "sort_monthly_output": "sort_monthly_output",
         "download_sort_monthly_output": "sort_monthly_output",
+        "monthly_sort_strategy": "monthly_sort_strategy",
+        "download_monthly_sort_strategy": "monthly_sort_strategy",
         "download_order": "download_order",
         "download_download_order": "download_order",
         "request_interval_seconds": "request_interval_seconds",
@@ -420,6 +458,16 @@ def parse_date(value: str) -> date:
         raise argparse.ArgumentTypeError(f"Invalid date '{value}'. Use YYYY-MM-DD.") from exc
 
 
+def parse_bulk_chunk_size(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--bulk-chunk-size must be an integer.") from exc
+    if parsed < 1 or parsed > 2048:
+        raise argparse.ArgumentTypeError("--bulk-chunk-size must be between 1 and 2048.")
+    return parsed
+
+
 def cli_repeatable_values(argv: Sequence[str], flag: str) -> List[str]:
     values: List[str] = []
     index = 0
@@ -488,7 +536,7 @@ def parse_retry_after_seconds(value: Optional[str]) -> float:
     try:
         return max(0.0, float(value))
     except ValueError:
-        # HTTP-date form is rare here; fallback to default backoff path.
+        # HTTP-date Retry-After values are uncommon here; use default backoff.
         return 0.0
 
 
@@ -644,7 +692,7 @@ def _looks_like_empty_archive_payload(payload: object) -> bool:
     if "product" not in payload:
         return False
 
-    # Typical empty archive response includes only metadata + product details.
+    # Typical empty archive payload includes metadata and product details only.
     if set(payload.keys()).issubset({"_links", "_meta", "product"}):
         meta = payload.get("_meta")
         if isinstance(meta, dict):
@@ -657,7 +705,7 @@ def _looks_like_empty_archive_payload(payload: object) -> bool:
                         return True
                 except (TypeError, ValueError):
                     continue
-        # No count fields present; still treat this shape as empty archive rather than an error.
+        # If count fields are absent, still treat this shape as an empty archive.
         return True
     return False
 
@@ -697,12 +745,12 @@ class ErcotPublicReportsClient:
         self.next_request_at = 0.0
         self.reauth_config = reauth_config
         self.session = requests.Session()
+        # Keep headers minimal. For archive downloads, default Requests negotiation
+        # is more robust than forcing Accept/User-Agent values.
         self.session.headers.update(
             {
                 "Authorization": f"Bearer {bearer_token}",
                 "Ocp-Apim-Subscription-Key": subscription_key,
-                "Accept": "application/json",
-                "User-Agent": "spring-2026-electricity-TX/ercot-downloader",
             }
         )
 
@@ -843,11 +891,33 @@ class ErcotPublicReportsClient:
                 return
             except requests.HTTPError as exc:
                 status = exc.response.status_code if exc.response is not None else None
-                # Try next candidate on common lookup-path misses or throttling.
+                # Try the next candidate on lookup misses or transient throttling.
                 if status in (400, 404, 429, 500, 502, 503, 504) and index < len(candidates) - 1:
                     continue
                 raise
         raise RuntimeError("All download URL candidates failed.")
+
+    def download_docs(
+        self,
+        report_id: str,
+        doc_ids: List[str],
+    ) -> Dict[str, bytes]:
+        ret: Dict[str, bytes] = {}
+        url = f"https://api.ercot.com/api/public-reports/archive/{report_id}/download"
+        with self._request(
+            "POST",
+            url,
+            json={"docIds": doc_ids},
+        ) as response:
+            unzipped = extract_zip_from_memory(response.content)
+            assert len(unzipped) == len(doc_ids)
+            for filename, zipped_doc in unzipped.items():
+                doc_id = filename.split(".", 1)[0]
+                inner_unzipped = extract_zip_from_memory(zipped_doc)
+                assert len(inner_unzipped) == 1
+                doc_content = list(inner_unzipped.items())[0][1]
+                ret[doc_id] = doc_content
+        return ret
 
 
 def choose_filename(doc: Dict[str, object]) -> str:
@@ -860,8 +930,8 @@ def choose_filename(doc: Dict[str, object]) -> str:
 
 
 def with_doc_id_suffix(filename: str, doc_id: str) -> str:
-    # Archive often contains multiple docs sharing the same constructed filename.
-    # Suffix with doc ID to prevent silent overwrite within each month folder.
+    # Some archive docs share the same constructed filename.
+    # Append doc ID so files do not overwrite each other within a month folder.
     base, ext = os.path.splitext(filename)
     return f"{base}__{doc_id}{ext}" if doc_id else filename
 
@@ -1001,14 +1071,11 @@ def maybe_extract_zip(path: Path) -> None:
 
 
 def list_selected_datasets(dataset_ids: Iterable[str]) -> None:
-    print("Selected datasets")
-    print("=================")
     for dataset_id in dataset_ids:
         metadata = DATASETS.get(dataset_id, {})
         title = metadata.get("title", "Unknown dataset")
         reason = metadata.get("reason", "No reason in catalog.")
-        print(f"- {dataset_id}: {title}")
-        print(f"  reason: {reason}")
+        log_event("DATASET_SELECTED", dataset=dataset_id, title=title, reason=reason)
 
 
 def list_archive_docs_with_retries(
@@ -1052,10 +1119,13 @@ def list_archive_docs_with_retries(
                         retry_after,
                         retry_sleep_seconds * (2 ** listing_attempt),
                     )
-                    print(
-                        "Archive listing 429 for "
-                        f"{dataset_id} page {page} (attempt {listing_attempt}/{archive_listing_retries}). "
-                        f"Sleeping {cooldown_seconds:.1f}s before retry."
+                    log_event(
+                        "ARCHIVE_LISTING_RETRY",
+                        dataset=dataset_id,
+                        page=page,
+                        attempt=f"{listing_attempt}/{archive_listing_retries}",
+                        sleep_seconds=f"{cooldown_seconds:.1f}",
+                        reason="http_429",
                     )
                     time.sleep(cooldown_seconds)
                     continue
@@ -1072,9 +1142,11 @@ def list_archive_docs_with_retries(
         if on_page_listed is not None:
             on_page_listed(page, tagged_rows, len(docs))
         if progress_every_pages > 0 and (page == 1 or page % progress_every_pages == 0):
-            print(
-                "Archive listing progress "
-                f"{dataset_id}: page={page} docs_collected={len(docs)}"
+            log_event(
+                "ARCHIVE_LISTING_PROGRESS",
+                dataset=dataset_id,
+                page=page,
+                docs_collected=len(docs),
             )
         if len(rows) < page_size:
             break
@@ -1117,10 +1189,12 @@ def archive_window_has_docs(
                     retry_after,
                     retry_sleep_seconds * (2 ** listing_attempt),
                 )
-                print(
-                    "Archive probe 429 for "
-                    f"{dataset_id} (attempt {listing_attempt}/{archive_listing_retries}). "
-                    f"Sleeping {cooldown_seconds:.1f}s before retry."
+                log_event(
+                    "ARCHIVE_PROBE_RETRY",
+                    dataset=dataset_id,
+                    attempt=f"{listing_attempt}/{archive_listing_retries}",
+                    sleep_seconds=f"{cooldown_seconds:.1f}",
+                    reason="http_429",
                 )
                 time.sleep(cooldown_seconds)
                 continue
@@ -1139,7 +1213,7 @@ def find_earliest_available_date(
     if search_from > search_to:
         return None
 
-    # Coarse-to-fine probe: year -> month -> day.
+    # Probe earliest availability from coarse to fine: year, then month, then day.
     for year in range(search_from.year, search_to.year + 1):
         year_start = max(search_from, date(year, 1, 1))
         year_end = min(search_to, date(year, 12, 31))
@@ -1187,10 +1261,10 @@ def find_earliest_available_date(
                 ):
                     return day
 
-            # Fallback: month has docs but day-level probing found none.
+            # Fallback: month-level probe succeeded but no day-level hit was found.
             return month_start
 
-        # Fallback: year has docs but month-level probing found none.
+        # Fallback: year-level probe succeeded but no month-level hit was found.
         return year_start
 
     return None
@@ -1231,10 +1305,8 @@ def order_archive_docs(docs: List[Dict[str, object]], order: str) -> List[Dict[s
     raise ValueError(f"Unknown download order '{order}'.")
 
 
-def _parse_csv_date(value: str) -> Optional[datetime]:
-    raw = value.strip()
-    if not raw:
-        return None
+@lru_cache(maxsize=CSV_PARSE_CACHE_SIZE)
+def _parse_csv_date_cached(raw: str) -> Optional[datetime]:
     for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"):
         try:
             return datetime.strptime(raw, fmt)
@@ -1246,10 +1318,15 @@ def _parse_csv_date(value: str) -> Optional[datetime]:
         return None
 
 
-def _parse_hour_ending(value: str) -> Optional[Tuple[int, int]]:
+def _parse_csv_date(value: str) -> Optional[datetime]:
     raw = value.strip()
     if not raw:
         return None
+    return _parse_csv_date_cached(raw)
+
+
+@lru_cache(maxsize=CSV_PARSE_CACHE_SIZE)
+def _parse_hour_ending_cached(raw: str) -> Optional[Tuple[int, int]]:
     if ":" in raw:
         left = "".join(ch for ch in raw.split(":", 1)[0] if ch.isdigit())
     else:
@@ -1264,9 +1341,16 @@ def _parse_hour_ending(value: str) -> Optional[Tuple[int, int]]:
     return hour, 0
 
 
-def _parse_csv_datetime(value: str) -> Optional[datetime]:
+def _parse_hour_ending(value: str) -> Optional[Tuple[int, int]]:
     raw = value.strip()
     if not raw:
+        return None
+    return _parse_hour_ending_cached(raw)
+
+
+@lru_cache(maxsize=CSV_PARSE_CACHE_SIZE)
+def _parse_csv_datetime_cached(raw: str) -> Optional[datetime]:
+    if ":" not in raw:
         return None
     for fmt in (
         "%Y-%m-%d %H:%M:%S",
@@ -1288,6 +1372,13 @@ def _parse_csv_datetime(value: str) -> Optional[datetime]:
     return parsed
 
 
+def _parse_csv_datetime(value: str) -> Optional[datetime]:
+    raw = value.strip()
+    if not raw:
+        return None
+    return _parse_csv_datetime_cached(raw)
+
+
 def _csv_row_timestamp(row: Dict[str, str], lower_to_name: Dict[str, str]) -> Optional[datetime]:
     def get(name: str) -> str:
         actual = lower_to_name.get(name.lower())
@@ -1295,7 +1386,7 @@ def _csv_row_timestamp(row: Dict[str, str], lower_to_name: Dict[str, str]) -> Op
             return ""
         return str(row.get(actual, "") or "")
 
-    # Single timestamp columns.
+    # Single-column timestamps.
     for key in (
         "scedtimestamp",
         "scedtimestamputc",
@@ -1314,12 +1405,12 @@ def _csv_row_timestamp(row: Dict[str, str], lower_to_name: Dict[str, str]) -> Op
         if parsed is not None:
             return parsed
 
-    # Older wind files: HOUR_ENDING already has full datetime.
+    # Older wind files store full datetime in HOUR_ENDING.
     parsed_hour_ending_dt = _parse_csv_datetime(get("hour_ending"))
     if parsed_hour_ending_dt is not None:
         return parsed_hour_ending_dt
 
-    # Date + hour pairs.
+    # Date and hour column pairs.
     for date_key, hour_key in (
         ("deliverydate", "hourending"),
         ("delivery_date", "hour_ending"),
@@ -1332,6 +1423,146 @@ def _csv_row_timestamp(row: Dict[str, str], lower_to_name: Dict[str, str]) -> Op
             return day.replace(hour=hm[0], minute=hm[1])
 
     return None
+
+
+def _csv_row_target_timestamp(row: Dict[str, str], lower_to_name: Dict[str, str]) -> Optional[datetime]:
+    def get(name: str) -> str:
+        actual = lower_to_name.get(name.lower())
+        if actual is None:
+            return ""
+        return str(row.get(actual, "") or "")
+
+    for key in (
+        "deliveryinterval",
+        "intervalending",
+        "intervalend",
+        "intervaltime",
+        "hourendingdatetime",
+        "deliverydatetime",
+        "scedtimestamp",
+        "scedtimestamputc",
+        "datetime",
+        "timestamp",
+    ):
+        parsed = _parse_csv_datetime(get(key))
+        if parsed is not None:
+            return parsed
+
+    for date_key, hour_key in (
+        ("deliverydate", "hourending"),
+        ("delivery_date", "hour_ending"),
+        ("deliverydate", "deliveryhour"),
+        ("operday", "hourending"),
+        ("operatingday", "hourending"),
+        ("marketday", "hourending"),
+        ("date", "hourending"),
+    ):
+        day = _parse_csv_date(get(date_key))
+        hm = _parse_hour_ending(get(hour_key))
+        if day is not None and hm is not None:
+            return day.replace(hour=hm[0], minute=hm[1])
+
+    return None
+
+
+def _csv_row_issue_timestamp(row: Dict[str, str], lower_to_name: Dict[str, str]) -> Optional[datetime]:
+    def get(name: str) -> str:
+        actual = lower_to_name.get(name.lower())
+        if actual is None:
+            return ""
+        return str(row.get(actual, "") or "")
+
+    for key in (
+        "postingtime",
+        "postdatetime",
+        "publishdatetime",
+        "issuetime",
+        "issue_datetime",
+        "forecastissuedatetime",
+        "createdatetime",
+        "createdat",
+    ):
+        parsed = _parse_csv_datetime(get(key))
+        if parsed is not None:
+            return parsed
+
+    for key in ("postingdate", "publishdate", "issuedate", "issue_date"):
+        parsed_date = _parse_csv_date(get(key))
+        if parsed_date is not None:
+            return parsed_date
+
+    return None
+
+
+def resolve_monthly_sort_strategy(sort_strategy: str, lower_to_name: Dict[str, str]) -> str:
+    if sort_strategy == "timestamp":
+        return "timestamp"
+    if sort_strategy == "forecast-aware":
+        return "forecast-aware"
+    if sort_strategy != "auto":
+        raise ValueError(f"Unknown monthly sort strategy '{sort_strategy}'.")
+
+    available = set(lower_to_name)
+    target_hints = {
+        "deliveryinterval",
+        "intervalending",
+        "intervalend",
+        "intervaltime",
+        "hourendingdatetime",
+        "deliverydatetime",
+        "deliverydate",
+        "delivery_date",
+        "operday",
+        "operatingday",
+        "marketday",
+        "hourending",
+        "hour_ending",
+        "deliveryhour",
+    }
+    issue_hints = {
+        "postingtime",
+        "postdatetime",
+        "publishdatetime",
+        "issuetime",
+        "issue_datetime",
+        "forecastissuedatetime",
+        "createdatetime",
+        "createdat",
+        "postingdate",
+        "publishdate",
+        "issuedate",
+        "issue_date",
+    }
+    has_target = any(key in available for key in target_hints)
+    has_issue = any(key in available for key in issue_hints)
+    return "forecast-aware" if has_target and has_issue else "timestamp"
+
+
+def _csv_row_sort_key(
+    row: Dict[str, str],
+    lower_to_name: Dict[str, str],
+    sort_strategy: str,
+) -> Optional[Tuple[datetime, ...]]:
+    if sort_strategy == "timestamp":
+        timestamp = _csv_row_timestamp(row, lower_to_name)
+        return (timestamp,) if timestamp is not None else None
+
+    if sort_strategy == "forecast-aware":
+        target_time = _csv_row_target_timestamp(row, lower_to_name)
+        issue_time = _csv_row_issue_timestamp(row, lower_to_name)
+
+        if target_time is None and issue_time is None:
+            fallback = _csv_row_timestamp(row, lower_to_name)
+            if fallback is None:
+                return None
+            return (fallback, fallback)
+        if target_time is None:
+            target_time = issue_time
+        if issue_time is None:
+            issue_time = target_time
+        return (target_time, issue_time)
+
+    raise ValueError(f"Unknown monthly sort strategy '{sort_strategy}'.")
 
 
 def resolve_monthly_sort_order(sort_option: str, download_order: str) -> Optional[str]:
@@ -1348,44 +1579,207 @@ def resolve_monthly_sort_order(sort_option: str, download_order: str) -> Optiona
     raise ValueError(f"Unknown monthly sort option '{sort_option}'.")
 
 
-def sort_monthly_csv(path: Path, sort_order: str) -> str:
+def _monthly_sort_cache_path(path: Path) -> Path:
+    return path.with_suffix(path.suffix + ".sortcache.json")
+
+
+def _monthly_sort_file_signature(path: Path) -> Tuple[int, int]:
+    stat = path.stat()
+    return stat.st_size, stat.st_mtime_ns
+
+
+def _cache_int(value: object) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _read_monthly_sort_cache(path: Path) -> Optional[Dict[str, object]]:
+    cache_path = _monthly_sort_cache_path(path)
+    if not cache_path.exists():
+        return None
+    try:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _write_monthly_sort_cache(
+    path: Path,
+    *,
+    sort_order: str,
+    sort_strategy: str,
+    classification: str,
+    size_bytes: int,
+    mtime_ns: int,
+) -> None:
+    cache_path = _monthly_sort_cache_path(path)
+    payload = {
+        "version": MONTHLY_SORT_CACHE_VERSION,
+        "sort_order": sort_order,
+        "sort_strategy": sort_strategy,
+        "classification": classification,
+        "size_bytes": size_bytes,
+        "mtime_ns": mtime_ns,
+        "updated_at": utc_now_iso(),
+    }
+    try:
+        cache_path.write_text(
+            json.dumps(payload, ensure_ascii=True, sort_keys=True),
+            encoding="utf-8",
+        )
+    except Exception:  # noqa: BLE001
+        return
+
+
+def _cached_monthly_sort_classification(
+    path: Path,
+    *,
+    sort_order: str,
+    sort_strategy: str,
+    size_bytes: int,
+    mtime_ns: int,
+) -> Optional[str]:
+    cached = _read_monthly_sort_cache(path)
+    if cached is None:
+        return None
+    if _cache_int(cached.get("version")) != MONTHLY_SORT_CACHE_VERSION:
+        return None
+    if cached.get("sort_order") != sort_order:
+        return None
+    if cached.get("sort_strategy") != sort_strategy:
+        return None
+    if _cache_int(cached.get("size_bytes")) != size_bytes:
+        return None
+    if _cache_int(cached.get("mtime_ns")) != mtime_ns:
+        return None
+    classification = str(cached.get("classification") or "")
+    if classification in {"sorted", "skipped"}:
+        return classification
+    return None
+
+
+def sort_monthly_csv(path: Path, sort_order: str, sort_strategy: str = "auto") -> str:
+    if sort_order not in {"ascending", "descending"}:
+        raise ValueError(f"Unknown sort order '{sort_order}'.")
+    try:
+        size_before, mtime_before = _monthly_sort_file_signature(path)
+    except OSError:
+        size_before, mtime_before = -1, -1
+    cached_classification = _cached_monthly_sort_classification(
+        path,
+        sort_order=sort_order,
+        sort_strategy=sort_strategy,
+        size_bytes=size_before,
+        mtime_ns=mtime_before,
+    )
+    if cached_classification == "sorted":
+        return "already"
+    if cached_classification == "skipped":
+        return "skipped"
+
     with open(path, "r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         if not reader.fieldnames:
+            _write_monthly_sort_cache(
+                path,
+                sort_order=sort_order,
+                sort_strategy=sort_strategy,
+                classification="skipped",
+                size_bytes=size_before,
+                mtime_ns=mtime_before,
+            )
             return "skipped"
         fieldnames = list(reader.fieldnames)
         lower_to_name = {name.lower(): name for name in fieldnames}
-        raw_rows = list(reader)
-    if not raw_rows:
+        effective_strategy = resolve_monthly_sort_strategy(sort_strategy, lower_to_name)
+        parsed_rows: List[Tuple[Tuple[datetime, ...], Dict[str, str]]] = []
+        unparsed_rows: List[Dict[str, str]] = []
+        saw_rows = False
+        saw_unparsed = False
+        already_sorted = True
+        previous_key: Optional[Tuple[datetime, ...]] = None
+
+        for row in reader:
+            saw_rows = True
+            sort_key = _csv_row_sort_key(row, lower_to_name, effective_strategy)
+            if sort_key is None:
+                saw_unparsed = True
+                unparsed_rows.append(row)
+                continue
+
+            parsed_rows.append((sort_key, row))
+
+            # Output layout is parsed rows first, then unparsed rows.
+            if saw_unparsed:
+                already_sorted = False
+
+            if previous_key is not None:
+                if sort_order == "ascending" and sort_key < previous_key:
+                    already_sorted = False
+                elif sort_order == "descending" and sort_key > previous_key:
+                    already_sorted = False
+            previous_key = sort_key
+
+    if not saw_rows:
+        _write_monthly_sort_cache(
+            path,
+            sort_order=sort_order,
+            sort_strategy=sort_strategy,
+            classification="sorted",
+            size_bytes=size_before,
+            mtime_ns=mtime_before,
+        )
         return "already"
-
-    parsed_rows: List[Tuple[datetime, int, Dict[str, str]]] = []
-    unparsed_rows: List[Tuple[int, Dict[str, str]]] = []
-    for index, row in enumerate(raw_rows):
-        timestamp = _csv_row_timestamp(row, lower_to_name)
-        if timestamp is None:
-            unparsed_rows.append((index, row))
-            continue
-        parsed_rows.append((timestamp, index, row))
-
     if not parsed_rows:
+        _write_monthly_sort_cache(
+            path,
+            sort_order=sort_order,
+            sort_strategy=sort_strategy,
+            classification="skipped",
+            size_bytes=size_before,
+            mtime_ns=mtime_before,
+        )
         return "skipped"
-
-    ordered_parsed = sorted(parsed_rows, key=lambda item: (item[0], item[1]))
-    if sort_order == "descending":
-        ordered_parsed = list(reversed(ordered_parsed))
-    elif sort_order != "ascending":
-        raise ValueError(f"Unknown sort order '{sort_order}'.")
-
-    ordered_rows = [item[2] for item in ordered_parsed] + [item[1] for item in unparsed_rows]
-    original_rows = raw_rows
-    if ordered_rows == original_rows:
+    if already_sorted:
+        _write_monthly_sort_cache(
+            path,
+            sort_order=sort_order,
+            sort_strategy=sort_strategy,
+            classification="sorted",
+            size_bytes=size_before,
+            mtime_ns=mtime_before,
+        )
         return "already"
+
+    ordered_parsed = sorted(
+        parsed_rows,
+        key=lambda item: item[0],
+        reverse=(sort_order == "descending"),
+    )
+
+    ordered_rows = [item[1] for item in ordered_parsed] + unparsed_rows
 
     with open(path, "w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(ordered_rows)
+    try:
+        size_after, mtime_after = _monthly_sort_file_signature(path)
+    except OSError:
+        size_after, mtime_after = size_before, mtime_before
+    _write_monthly_sort_cache(
+        path,
+        sort_order=sort_order,
+        sort_strategy=sort_strategy,
+        classification="sorted",
+        size_bytes=size_after,
+        mtime_ns=mtime_after,
+    )
     return "sorted"
 
 
@@ -1468,6 +1862,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--outdir", default="data/raw/ercot", help="Output directory for downloads.")
     parser.add_argument("--page-size", type=int, default=1000, help="Archive API page size.")
     parser.add_argument("--max-docs-per-dataset", type=int, default=0, help="0 means unlimited.")
+    parser.add_argument(
+        "--bulk-chunk-size",
+        type=parse_bulk_chunk_size,
+        default=256,
+        help="Bulk download chunk size (natural number 1..2048).",
+    )
     parser.add_argument("--extract-zips", action="store_true", help="Extract each downloaded ZIP archive.")
     parser.add_argument(
         "--consolidate-monthly",
@@ -1495,6 +1895,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="Print archive listing progress every N pages (0 to disable).",
+    )
+    parser.add_argument(
+        "--bulk-progress-every",
+        type=int,
+        default=10,
+        help=(
+            "Print BULK_REQUEST/BULK_DONE every N chunks "
+            "(first and last chunks are always printed). "
+            "Set 0 to print only first/last chunk progress."
+        ),
     )
     parser.add_argument(
         "--max-consecutive-network-failures",
@@ -1539,10 +1949,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sort-monthly-output",
         choices=("none", "ascending", "descending", "match-download-order"),
-        default="match-download-order",
+        default="ascending",
         help=(
             "Post-sort each touched monthly CSV by timestamp after dataset processing. "
+            "Default is 'ascending'. "
             "'match-download-order' uses descending for newest-first downloads, ascending otherwise."
+        ),
+    )
+    parser.add_argument(
+        "--monthly-sort-strategy",
+        choices=("auto", "timestamp", "forecast-aware"),
+        default="auto",
+        help=(
+            "Sort key strategy for monthly CSV sorting. "
+            "'auto' uses forecast-aware key when both target-time and issue-time columns exist, "
+            "otherwise timestamp-only."
         ),
     )
     parser.add_argument(
@@ -1659,11 +2080,9 @@ def main() -> None:
         failures_handle.flush()
 
     try:
-        print(f"Run directory: {run_dir}")
-        print(f"Run log: {run_log_path}")
-        print(f"Failure log: {failures_csv_path}")
+        log_event("RUN_PATHS", run_dir=run_dir, run_log=run_log_path, failure_log=failures_csv_path)
         if args.config:
-            print(f"Config file: {args.config}")
+            log_event("RUN_CONFIG", config=args.config)
 
         username = args.username or os.getenv("ERCOT_API_USERNAME")
         password = args.password or os.getenv("ERCOT_API_PASSWORD")
@@ -1675,13 +2094,21 @@ def main() -> None:
             )
         if args.from_earliest_available:
             args.from_date = EARLIEST_ARCHIVE_FROM
-            print(f"Using earliest-available mode: --from-date set to {args.from_date.isoformat()}")
+            log_event("DATE_MODE", mode="from_earliest_available", from_date=args.from_date.isoformat())
         if args.to_date is None:
             args.to_date = DEFAULT_TO_DATE
         if args.from_date > args.to_date:
             raise SystemExit("--from-date must be on or before --to-date.")
         if args.page_size <= 0:
             raise SystemExit("--page-size must be greater than 0.")
+        try:
+            args.bulk_chunk_size = int(args.bulk_chunk_size)
+        except (TypeError, ValueError) as exc:
+            raise SystemExit("--bulk-chunk-size must be an integer between 1 and 2048.") from exc
+        if args.bulk_chunk_size < 1 or args.bulk_chunk_size > 2048:
+            raise SystemExit("--bulk-chunk-size must be between 1 and 2048.")
+        if args.bulk_progress_every < 0:
+            raise SystemExit("--bulk-progress-every must be 0 or a positive integer.")
         if args.delete_source_after_consolidation and not args.consolidate_monthly:
             raise SystemExit("--delete-source-after-consolidation requires --consolidate-monthly.")
         monthly_sort_order = resolve_monthly_sort_order(args.sort_monthly_output, args.download_order)
@@ -1706,17 +2133,17 @@ def main() -> None:
             selected_profiles = []
             if explicit_cli_datasets:
                 args.dataset = explicit_cli_datasets
-                print(f"datasets-only mode: using CLI datasets: {', '.join(args.dataset)}")
+                log_event("DATASET_MODE", mode="datasets_only_cli", datasets=",".join(args.dataset))
             elif args.dataset:
                 args.dataset = normalize_dataset_ids(args.dataset)
-                print("datasets-only mode: no CLI --dataset provided; using configured dataset list.")
+                log_event("DATASET_MODE", mode="datasets_only_configured")
         elif selected_profiles is None:
             selected_profiles = ["core"]
         selected_ids = resolve_dataset_ids(selected_profiles, args.dataset)
         excluded_ids = set(normalize_dataset_ids(args.exclude_dataset or []))
         if excluded_ids:
             selected_ids = [dataset_id for dataset_id in selected_ids if dataset_id not in excluded_ids]
-            print(f"Excluded datasets: {', '.join(sorted(excluded_ids))}")
+            log_event("DATASET_EXCLUDED", datasets=",".join(sorted(excluded_ids)))
         if not selected_ids:
             raise SystemExit("No datasets selected after exclusions.")
         list_selected_datasets(selected_ids)
@@ -1724,9 +2151,9 @@ def main() -> None:
         state_dir = Path(args.state_dir)
         if args.resume_state:
             state_dir.mkdir(parents=True, exist_ok=True)
-            print(f"Checkpoint resume: enabled ({state_dir})")
+            log_event("RESUME_STATE", enabled=True, state_dir=state_dir)
         else:
-            print("Checkpoint resume: disabled")
+            log_event("RESUME_STATE", enabled=False, state_dir=state_dir)
 
         token = authenticate(
             username=username,
@@ -1759,7 +2186,7 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             if args.list_api_products:
                 raise SystemExit(f"Could not list API products: {exc}") from exc
-            print(f"Warning: unable to list public reports catalog, continuing: {exc}")
+            log_event("CATALOG_WARN", message="unable_to_list_public_reports", error=str(exc))
             public_reports = []
         product_by_id: Dict[str, Dict[str, object]] = {}
         for product in public_reports:
@@ -1768,12 +2195,9 @@ def main() -> None:
                 product_by_id[report_id] = product
 
         if args.list_api_products:
-            print("")
-            print("API products")
-            print("============")
             for report_id in sorted(product_by_id):
                 title = str(product_by_id[report_id].get("reportName", ""))
-                print(f"- {report_id}: {title}")
+                log_event("API_PRODUCT", report_id=report_id, title=title)
             return
 
         outdir = Path(args.outdir)
@@ -1785,13 +2209,12 @@ def main() -> None:
         for dataset_id in selected_ids:
             product = product_by_id.get(dataset_id)
             if product_by_id and product is None:
-                print("")
-                print(f"[{dataset_id}]")
-                print(
-                    "Skipped: dataset is not present in current ERCOT public-reports catalog "
-                    "for this account/subscription."
+                log_event(
+                    "DATASET_SKIP",
+                    dataset=dataset_id,
+                    reason="not_in_current_catalog_for_subscription",
+                    tip="run_with_list_api_products",
                 )
-                print("Tip: run with --list-api-products and use one of the listed EMIL IDs.")
                 stats.skipped_unavailable_dataset += 1
                 dataset_summaries[dataset_id] = {"status": "skipped_unavailable"}
                 continue
@@ -1800,8 +2223,7 @@ def main() -> None:
                 product.get("reportName") or product.get("name") or DATASETS.get(dataset_id, {}).get("title", "")
             ).strip()
             archive_url = maybe_product_archive_href(product) or f"{API_BASE_URL}/archive/{dataset_id.lower()}"
-            print("")
-            print(f"[{dataset_id}] {product_title}")
+            log_event("DATASET_START", dataset=dataset_id, title=product_title, archive=archive_url)
 
             dataset_summary: Dict[str, Any] = {
                 "title": product_title,
@@ -1853,17 +2275,19 @@ def main() -> None:
                         stage="earliest-date-detection",
                         error=str(exc),
                     )
-                    print(f"Earliest-date detection failed for {dataset_id}: {exc}")
+                    log_event("EARLIEST_DATE_ERROR", dataset=dataset_id, error=str(exc))
                     continue
                 if detected_from_date is None:
                     dataset_summary["status"] = "no_docs_in_window"
-                    print(
-                        "No archive docs found for this dataset between "
-                        f"{args.from_date.isoformat()} and {args.to_date.isoformat()}."
+                    log_event(
+                        "EARLIEST_DATE_EMPTY",
+                        dataset=dataset_id,
+                        search_from=args.from_date.isoformat(),
+                        search_to=args.to_date.isoformat(),
                     )
                     continue
                 dataset_from_date = detected_from_date
-                print(f"Auto-detected earliest available date: {dataset_from_date.isoformat()}")
+                log_event("EARLIEST_DATE_FOUND", dataset=dataset_id, from_date=dataset_from_date.isoformat())
             dataset_summary["window_from"] = dataset_from_date.isoformat()
 
             dataset_state_path = state_dir / f"{dataset_id}.json"
@@ -1900,10 +2324,11 @@ def main() -> None:
                     resume_start_page = _safe_int(dataset_state.get("last_listed_page"), 0) + 1
                     dataset_summary["resume_start_page"] = max(1, resume_start_page)
                     if cached_docs:
-                        print(
-                            "Loaded archive listing cache "
-                            f"for {dataset_id}: pages<= {dataset_state['last_listed_page']} "
-                            f"docs={len(cached_docs)}"
+                        log_event(
+                            "ARCHIVE_CACHE_LOADED",
+                            dataset=dataset_id,
+                            pages_le=dataset_state["last_listed_page"],
+                            docs=len(cached_docs),
                         )
                 else:
                     if dataset_cache_path.exists():
@@ -1919,9 +2344,11 @@ def main() -> None:
                 docs, cached_last_page = load_archive_docs_cache(dataset_cache_path)
                 dataset_state["last_listed_page"] = max(_safe_int(dataset_state.get("last_listed_page"), 0), cached_last_page)
                 dataset_state["total_listed_docs"] = len(docs)
-                print(
-                    "Using completed archive cache "
-                    f"for {dataset_id}: pages={dataset_state['last_listed_page']} docs={len(docs)}"
+                log_event(
+                    "ARCHIVE_CACHE_REUSED",
+                    dataset=dataset_id,
+                    pages=dataset_state["last_listed_page"],
+                    docs=len(docs),
                 )
             else:
                 def on_page_listed(page: int, page_docs: List[Dict[str, Any]], total_docs: int) -> None:
@@ -1962,7 +2389,7 @@ def main() -> None:
                         dataset_state["status"] = "failed"
                         dataset_state["failure"] = str(exc)
                         save_dataset_state(dataset_state_path, dataset_state)
-                    print(f"Archive listing failed for {dataset_id}: {exc}")
+                    log_event("ARCHIVE_LISTING_ERROR", dataset=dataset_id, error=str(exc))
                     continue
                 if args.resume_state:
                     dataset_state["listing_complete"] = True
@@ -1971,27 +2398,28 @@ def main() -> None:
                     save_dataset_state(dataset_state_path, dataset_state)
 
             dataset_summary["docs_listed"] = len(docs)
-            print(
-                "Archive documents found "
-                f"({dataset_from_date.isoformat()} to {args.to_date.isoformat()}): {len(docs)}"
+            log_event(
+                "ARCHIVE_DOCS_FOUND",
+                dataset=dataset_id,
+                from_date=dataset_from_date.isoformat(),
+                to_date=args.to_date.isoformat(),
+                docs=len(docs),
             )
             if not docs:
                 dataset_summary["status"] = "no_docs_in_window"
                 if args.resume_state:
                     dataset_state["status"] = "completed"
                     save_dataset_state(dataset_state_path, dataset_state)
-                print("No archive docs in this date range.")
+                log_event("DATASET_EMPTY", dataset=dataset_id, reason="no_docs_in_window")
                 continue
             if args.download_order != "api":
-                print(
-                    f"Sorting {len(docs)} archive docs for download order: {args.download_order} ..."
-                )
+                log_event("DOC_ORDER_SORT", dataset=dataset_id, docs=len(docs), order=args.download_order)
             docs = order_archive_docs(docs, args.download_order)
             if args.download_order != "api":
-                print(f"Applying download order: {args.download_order}")
+                log_event("DOC_ORDER_APPLIED", dataset=dataset_id, order=args.download_order)
             if args.max_docs_per_dataset > 0:
                 docs = docs[: args.max_docs_per_dataset]
-                print(f"Applying --max-docs-per-dataset: {len(docs)} docs")
+                log_event("DOC_LIMIT_APPLIED", dataset=dataset_id, docs=len(docs))
 
             resume_doc_index = _safe_int(dataset_state.get("next_doc_index"), 0) if args.resume_state else 0
             if resume_doc_index < 0:
@@ -2000,10 +2428,21 @@ def main() -> None:
                 resume_doc_index = len(docs)
             dataset_summary["resume_start_index"] = resume_doc_index
             if resume_doc_index > 0 and resume_doc_index < len(docs):
-                print(
-                    f"Resuming doc processing for {dataset_id} at "
-                    f"index {resume_doc_index + 1}/{len(docs)}"
+                log_event(
+                    "DOC_RESUME",
+                    dataset=dataset_id,
+                    resume_index=resume_doc_index + 1,
+                    docs=len(docs),
                 )
+            docs_remaining = len(docs) - resume_doc_index
+            log_event(
+                "DOC_PARSE_PLAN",
+                dataset=dataset_id,
+                listed=len(docs),
+                resume_index=resume_doc_index,
+                remaining=docs_remaining,
+                bulk_chunk_size=args.bulk_chunk_size,
+            )
 
             def save_doc_checkpoint(doc_index: int, doc_id: str, doc: Dict[str, Any]) -> None:
                 if not args.resume_state:
@@ -2015,10 +2454,176 @@ def main() -> None:
                 dataset_state["status"] = "running"
                 save_dataset_state(dataset_state_path, dataset_state)
 
+            chunk_size = args.bulk_chunk_size
+            bulk_written_doc_ids: Set[str] = set()
+            doc_chunks = [docs[i : i + chunk_size] for i in range(resume_doc_index, len(docs), chunk_size)]
+            total_chunks = len(doc_chunks)
+
+            def should_log_bulk_progress(chunk_id: int) -> bool:
+                if total_chunks <= 1:
+                    return True
+                if chunk_id == 1 or chunk_id == total_chunks:
+                    return True
+                if args.bulk_progress_every <= 0:
+                    return False
+                return chunk_id % args.bulk_progress_every == 0
+
+            if doc_chunks:
+                log_event("BULK_QUEUE", dataset=dataset_id, chunks=len(doc_chunks), chunk_size=chunk_size)
+            for chunk_id, doc_chunk in enumerate(doc_chunks, start=1):
+                chunk_started_at = time.monotonic()
+                chunk_label = f"{chunk_id}/{len(doc_chunks)}"
+                chunk_doc_ids: List[str] = []
+                missing_doc_id_count = 0
+                for doc in doc_chunk:
+                    doc_id = extract_doc_id(doc)
+                    if not doc_id:
+                        missing_doc_id_count += 1
+                        continue
+                    filename = choose_filename(doc)
+                    filename = with_doc_id_suffix(filename, doc_id)
+                    dataset_subdir = dataset_subdir_from_doc(doc)
+                    destination = outdir / dataset_id / dataset_subdir / filename
+                    wanted_size = expected_size(doc)
+                    exists_and_matches = (
+                        destination.exists()
+                        and (wanted_size < 0 or destination.stat().st_size == wanted_size)
+                    )
+                    if not exists_and_matches:
+                        chunk_doc_ids.append(doc_id)
+
+                if missing_doc_id_count > 0:
+                    log_event(
+                        "BULK_WARN",
+                        dataset=dataset_id,
+                        chunk=chunk_label,
+                        missing_doc_id=missing_doc_id_count,
+                    )
+                if not chunk_doc_ids:
+                    reason = "all_files_exist" if missing_doc_id_count == 0 else "no_bulk_candidates"
+                    if should_log_bulk_progress(chunk_id):
+                        log_event(
+                            "BULK_SKIP",
+                            dataset=dataset_id,
+                            chunk=chunk_label,
+                            reason=reason,
+                        )
+                    chunk_elapsed_seconds = time.monotonic() - chunk_started_at
+                    log_event(
+                        "BULK_DONE",
+                        dataset=dataset_id,
+                        chunk=chunk_label,
+                        requested=0,
+                        wrote=0,
+                        status="skipped",
+                        elapsed_seconds=f"{chunk_elapsed_seconds:.2f}",
+                    )
+                    continue
+
+                if should_log_bulk_progress(chunk_id):
+                    log_event(
+                        "BULK_REQUEST",
+                        dataset=dataset_id,
+                        chunk=chunk_label,
+                        docs=len(chunk_doc_ids),
+                    )
+                try:
+                    doc_contents = client.download_docs(dataset_id, chunk_doc_ids)
+                except Exception as exc:  # noqa: BLE001
+                    stats.failures += 1
+                    dataset_summary["status"] = "running_with_failures"
+                    record_failure(
+                        dataset_id=dataset_id,
+                        stage="bulk-download",
+                        error=str(exc),
+                        page=_safe_int(doc_chunk[0].get("__archive_page"), 0),
+                    )
+                    log_event(
+                        "BULK_ERROR",
+                        dataset=dataset_id,
+                        chunk=chunk_label,
+                        docs=len(chunk_doc_ids),
+                        error=str(exc),
+                    )
+                    chunk_elapsed_seconds = time.monotonic() - chunk_started_at
+                    log_event(
+                        "BULK_DONE",
+                        dataset=dataset_id,
+                        chunk=chunk_label,
+                        requested=len(chunk_doc_ids),
+                        wrote=0,
+                        status="error",
+                        elapsed_seconds=f"{chunk_elapsed_seconds:.2f}",
+                    )
+                    continue
+
+                missing_payload_ids = [doc_id for doc_id in chunk_doc_ids if doc_id not in doc_contents]
+                if missing_payload_ids:
+                    log_event(
+                        "BULK_WARN",
+                        dataset=dataset_id,
+                        chunk=chunk_label,
+                        missing_payload=len(missing_payload_ids),
+                    )
+
+                written_count = 0
+                for doc in doc_chunk:
+                    doc_id = extract_doc_id(doc)
+                    if not doc_id:
+                        continue
+                    content = doc_contents.get(doc_id)
+                    if content is None:
+                        continue
+                    filename = choose_filename(doc)
+                    filename = with_doc_id_suffix(filename, doc_id)
+                    dataset_subdir = dataset_subdir_from_doc(doc)
+                    destination = outdir / dataset_id / dataset_subdir / filename
+                    try:
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        with open(destination, "wb") as handle:
+                            handle.write(content)
+                    except Exception as exc:  # noqa: BLE001
+                        stats.failures += 1
+                        dataset_summary["status"] = "running_with_failures"
+                        record_failure(
+                            dataset_id=dataset_id,
+                            stage="bulk-write",
+                            error=str(exc),
+                            doc_id=doc_id,
+                            page=_safe_int(doc.get("__archive_page"), 0),
+                        )
+                        log_event(
+                            "BULK_ERROR",
+                            dataset=dataset_id,
+                            chunk=chunk_label,
+                            doc_id=doc_id,
+                            error=str(exc),
+                        )
+                        continue
+                    bulk_written_doc_ids.add(doc_id)
+                    written_count += 1
+
+                chunk_elapsed_seconds = time.monotonic() - chunk_started_at
+                log_event(
+                    "BULK_DONE",
+                    dataset=dataset_id,
+                    chunk=chunk_label,
+                    requested=len(chunk_doc_ids),
+                    wrote=written_count,
+                    status="ok",
+                    elapsed_seconds=f"{chunk_elapsed_seconds:.2f}",
+                )
+
             for doc_index, doc in enumerate(docs[resume_doc_index:], start=resume_doc_index):
                 doc_id = extract_doc_id(doc)
                 if not doc_id:
                     stats.skipped_missing_doc_id += 1
+                    log_event(
+                        "DOC_WARN",
+                        dataset=dataset_id,
+                        index=f"{doc_index + 1}/{len(docs)}",
+                        reason="missing_doc_id",
+                    )
                     dataset_summary["docs_processed"] += 1
                     save_doc_checkpoint(doc_index, "", doc)
                     continue
@@ -2045,24 +2650,45 @@ def main() -> None:
                     and (wanted_size < 0 or destination.stat().st_size == wanted_size)
                 )
                 if exists_and_matches and not args.consolidate_monthly:
-                    stats.skipped_existing += 1
+                    if doc_id in bulk_written_doc_ids:
+                        bulk_written_doc_ids.remove(doc_id)
+                        stats.downloaded += 1
+                        dataset_summary["docs_downloaded"] += 1
+                        if args.extract_zips:
+                            maybe_extract_zip(destination)
+                    else:
+                        stats.skipped_existing += 1
                     dataset_summary["docs_processed"] += 1
                     save_doc_checkpoint(doc_index, doc_id, doc)
                     continue
                 if args.dry_run:
                     if args.consolidate_monthly:
                         if exists_and_matches:
-                            print(
-                                "DRY RUN consolidate-existing: "
-                                f"{dataset_id} docId={doc_id} {destination} -> {monthly_path}"
+                            log_event(
+                                "DRY_RUN",
+                                dataset=dataset_id,
+                                action="consolidate_existing",
+                                doc_id=doc_id,
+                                source=destination,
+                                target=monthly_path,
                             )
                         else:
-                            print(
-                                "DRY RUN download+consolidate: "
-                                f"{dataset_id} docId={doc_id} -> {destination} -> {monthly_path}"
+                            log_event(
+                                "DRY_RUN",
+                                dataset=dataset_id,
+                                action="download_and_consolidate",
+                                doc_id=doc_id,
+                                destination=destination,
+                                target=monthly_path,
                             )
                     else:
-                        print(f"DRY RUN download: {dataset_id} docId={doc_id} -> {destination}")
+                        log_event(
+                            "DRY_RUN",
+                            dataset=dataset_id,
+                            action="download",
+                            doc_id=doc_id,
+                            destination=destination,
+                        )
                     dataset_summary["docs_processed"] += 1
                     save_doc_checkpoint(doc_index, doc_id, doc)
                     continue
@@ -2070,7 +2696,13 @@ def main() -> None:
                     source_path = destination
                     downloaded_now = False
                     if not (args.consolidate_monthly and exists_and_matches):
-                        client.download_doc(dataset_id, doc_id, destination, doc)
+                        if doc_id in bulk_written_doc_ids:
+                            bulk_written_doc_ids.remove(doc_id)
+                        else:
+                            client.download_doc(dataset_id, doc_id, destination, doc)
+                        downloaded_now = True
+                    elif doc_id in bulk_written_doc_ids:
+                        bulk_written_doc_ids.remove(doc_id)
                         downloaded_now = True
                     if args.consolidate_monthly:
                         appended_rows = append_doc_to_monthly_csv(source_path, monthly_path)
@@ -2106,7 +2738,7 @@ def main() -> None:
                         dataset_state["last_failed_doc_id"] = doc_id
                         dataset_state["last_failed_error"] = str(exc)
                         save_dataset_state(dataset_state_path, dataset_state)
-                    print(f"Download failed for {dataset_id} docId={doc_id}: {exc}")
+                    log_event("DOWNLOAD_ERROR", dataset=dataset_id, doc_id=doc_id, error=str(exc))
                     if is_name_resolution_failure(exc):
                         consecutive_network_failures += 1
                         if args.network_failure_cooldown_seconds > 0:
@@ -2156,11 +2788,18 @@ def main() -> None:
                     month_key = f"{year}-{month}" if year != "-" and month != "-" else "-"
 
                     if args.file_timing_frequency == "every-file":
-                        print(
-                            "FILE COMPLETE "
-                            f"{action} dataset={dataset_id} docId={doc_id} "
-                            f"file={output_file} stampdate={stampdate} date={stampdate_date} year={year} month={month} "
-                            f"elapsed={elapsed_seconds:.2f}s completed_at={completed_at}"
+                        log_event(
+                            "FILE_COMPLETE",
+                            action=action,
+                            dataset=dataset_id,
+                            doc_id=doc_id,
+                            file=output_file,
+                            stampdate=stampdate,
+                            date=stampdate_date,
+                            year=year,
+                            month=month,
+                            elapsed_seconds=f"{elapsed_seconds:.2f}",
+                            completed_at=completed_at,
                         )
                     elif args.file_timing_frequency in stampdate_thresholds:
                         threshold = stampdate_thresholds[args.file_timing_frequency]
@@ -2174,11 +2813,14 @@ def main() -> None:
                         else:
                             completed_stampdates += 1
                             if completed_stampdates % threshold == 0:
-                                print(
-                                    "STAMPDATE COMPLETE "
-                                    f"dataset={dataset_id} stampdate={current_stampdate} "
-                                    f"year={current_stampdate_year} month={current_stampdate_month} "
-                                    f"files={current_stampdate_files} completed_at={completed_at}"
+                                log_event(
+                                    "STAMPDATE_COMPLETE",
+                                    dataset=dataset_id,
+                                    stampdate=current_stampdate,
+                                    year=current_stampdate_year,
+                                    month=current_stampdate_month,
+                                    files=current_stampdate_files,
+                                    completed_at=completed_at,
                                 )
                             current_stampdate = stampdate
                             current_stampdate_files = 1
@@ -2194,11 +2836,14 @@ def main() -> None:
                         elif date_key == current_date_key:
                             current_date_files += 1
                         else:
-                            print(
-                                "DAY COMPLETE "
-                                f"dataset={dataset_id} date={current_date_key} "
-                                f"year={current_date_year} month={current_date_month} "
-                                f"files={current_date_files} completed_at={completed_at}"
+                            log_event(
+                                "DAY_COMPLETE",
+                                dataset=dataset_id,
+                                date=current_date_key,
+                                year=current_date_year,
+                                month=current_date_month,
+                                files=current_date_files,
+                                completed_at=completed_at,
                             )
                             current_date_key = date_key
                             current_date_files = 1
@@ -2207,11 +2852,16 @@ def main() -> None:
                     elif args.file_timing_frequency in calendar_day_schedules:
                         schedule_days = calendar_day_schedules[args.file_timing_frequency]
                         if stampdate_day in schedule_days and stampdate_date not in printed_calendar_dates:
-                            print(
-                                "DATE SCHEDULE HIT "
-                                f"schedule={args.file_timing_frequency} dataset={dataset_id} "
-                                f"date={stampdate_date} day={stampdate_day} year={year} month={month} "
-                                f"docId={doc_id} completed_at={completed_at}"
+                            log_event(
+                                "DATE_SCHEDULE_HIT",
+                                schedule=args.file_timing_frequency,
+                                dataset=dataset_id,
+                                date=stampdate_date,
+                                day=stampdate_day,
+                                year=year,
+                                month=month,
+                                doc_id=doc_id,
+                                completed_at=completed_at,
                             )
                             printed_calendar_dates.add(stampdate_date)
                     elif args.file_timing_frequency == "1-month":
@@ -2221,10 +2871,12 @@ def main() -> None:
                         elif month_key == current_month_key:
                             current_month_files += 1
                         else:
-                            print(
-                                "MONTH COMPLETE "
-                                f"dataset={dataset_id} month={current_month_key} "
-                                f"files={current_month_files} completed_at={completed_at}"
+                            log_event(
+                                "MONTH_COMPLETE",
+                                dataset=dataset_id,
+                                month=current_month_key,
+                                files=current_month_files,
+                                completed_at=completed_at,
                             )
                             current_month_key = month_key
                             current_month_files = 1
@@ -2249,26 +2901,34 @@ def main() -> None:
                 threshold = stampdate_thresholds[args.file_timing_frequency]
                 if completed_stampdates % threshold == 0:
                     completed_at = datetime.now().astimezone().isoformat(timespec="seconds")
-                    print(
-                        "STAMPDATE COMPLETE "
-                        f"dataset={dataset_id} stampdate={current_stampdate} "
-                        f"year={current_stampdate_year} month={current_stampdate_month} "
-                        f"files={current_stampdate_files} completed_at={completed_at}"
+                    log_event(
+                        "STAMPDATE_COMPLETE",
+                        dataset=dataset_id,
+                        stampdate=current_stampdate,
+                        year=current_stampdate_year,
+                        month=current_stampdate_month,
+                        files=current_stampdate_files,
+                        completed_at=completed_at,
                     )
             if args.file_timing_frequency == "daily" and current_date_key is not None:
                 completed_at = datetime.now().astimezone().isoformat(timespec="seconds")
-                print(
-                    "DAY COMPLETE "
-                    f"dataset={dataset_id} date={current_date_key} "
-                    f"year={current_date_year} month={current_date_month} "
-                    f"files={current_date_files} completed_at={completed_at}"
+                log_event(
+                    "DAY_COMPLETE",
+                    dataset=dataset_id,
+                    date=current_date_key,
+                    year=current_date_year,
+                    month=current_date_month,
+                    files=current_date_files,
+                    completed_at=completed_at,
                 )
             if args.file_timing_frequency == "1-month" and current_month_key is not None:
                 completed_at = datetime.now().astimezone().isoformat(timespec="seconds")
-                print(
-                    "MONTH COMPLETE "
-                    f"dataset={dataset_id} month={current_month_key} "
-                    f"files={current_month_files} completed_at={completed_at}"
+                log_event(
+                    "MONTH_COMPLETE",
+                    dataset=dataset_id,
+                    month=current_month_key,
+                    files=current_month_files,
+                    completed_at=completed_at,
                 )
 
             monthly_paths_to_sort: Set[Path] = set()
@@ -2283,13 +2943,20 @@ def main() -> None:
                     and monthly_csv_in_window(path, dataset_root, dataset_from_date, args.to_date)
                 )
             if monthly_sort_order and monthly_paths_to_sort:
-                print(
-                    "Post-sorting monthly CSV files "
-                    f"({len(monthly_paths_to_sort)}) in {monthly_sort_order} order..."
+                log_event(
+                    "MONTHLY_SORT_PLAN",
+                    dataset=dataset_id,
+                    files=len(monthly_paths_to_sort),
+                    order=monthly_sort_order,
+                    strategy=args.monthly_sort_strategy,
                 )
                 for monthly_path in sorted(monthly_paths_to_sort):
                     try:
-                        sort_status = sort_monthly_csv(monthly_path, monthly_sort_order)
+                        sort_status = sort_monthly_csv(
+                            monthly_path,
+                            monthly_sort_order,
+                            args.monthly_sort_strategy,
+                        )
                     except Exception as exc:  # noqa: BLE001
                         stats.monthly_sort_failures += 1
                         record_failure(
@@ -2297,7 +2964,7 @@ def main() -> None:
                             stage="monthly-sort",
                             error=str(exc),
                         )
-                        print(f"Monthly sort failed for {monthly_path}: {exc}")
+                        log_event("MONTHLY_SORT_ERROR", dataset=dataset_id, file=monthly_path, error=str(exc))
                         continue
                     if sort_status == "sorted":
                         stats.monthly_sorted += 1
@@ -2305,9 +2972,13 @@ def main() -> None:
                         stats.monthly_already_sorted += 1
                     else:
                         stats.monthly_sort_skipped += 1
-                    print(
-                        f"Monthly sort {sort_status}: {monthly_path} "
-                        f"(order={monthly_sort_order})"
+                    log_event(
+                        "MONTHLY_SORT_DONE",
+                        dataset=dataset_id,
+                        status=sort_status,
+                        file=monthly_path,
+                        order=monthly_sort_order,
+                        strategy=args.monthly_sort_strategy,
                     )
 
             dataset_summary["last_completed_page"] = _safe_int(dataset_state.get("last_completed_page"), 0)
@@ -2318,28 +2989,37 @@ def main() -> None:
             if args.resume_state:
                 dataset_state["status"] = dataset_summary["status"]
                 save_dataset_state(dataset_state_path, dataset_state)
+            log_event(
+                "DATASET_DONE",
+                dataset=dataset_id,
+                status=dataset_summary["status"],
+                listed=dataset_summary["docs_listed"],
+                processed=dataset_summary["docs_processed"],
+                downloaded=dataset_summary["docs_downloaded"],
+                failed=dataset_summary["docs_failed"],
+            )
 
-        print("")
-        print("Download summary")
-        print("================")
-        print(f"Downloaded: {stats.downloaded}")
-        print(f"Skipped existing: {stats.skipped_existing}")
-        print(f"Skipped missing docId: {stats.skipped_missing_doc_id}")
-        print(f"Skipped unavailable dataset: {stats.skipped_unavailable_dataset}")
+        summary_fields: Dict[str, object] = {
+            "downloaded": stats.downloaded,
+            "skipped_existing": stats.skipped_existing,
+            "skipped_missing_doc_id": stats.skipped_missing_doc_id,
+            "skipped_unavailable_dataset": stats.skipped_unavailable_dataset,
+            "failures": stats.failures,
+        }
         if args.consolidate_monthly:
-            print(f"Monthly files updated: {stats.consolidated_updates}")
+            summary_fields["monthly_files_updated"] = stats.consolidated_updates
         if monthly_sort_order and (args.consolidate_monthly or args.sort_existing_monthly):
-            print(f"Monthly files sorted: {stats.monthly_sorted}")
-            print(f"Monthly files already sorted: {stats.monthly_already_sorted}")
-            print(f"Monthly files sort skipped: {stats.monthly_sort_skipped}")
-            print(f"Monthly files sort failures: {stats.monthly_sort_failures}")
-        print(f"Failures: {stats.failures}")
+            summary_fields["monthly_files_sorted"] = stats.monthly_sorted
+            summary_fields["monthly_files_already_sorted"] = stats.monthly_already_sorted
+            summary_fields["monthly_files_sort_skipped"] = stats.monthly_sort_skipped
+            summary_fields["monthly_files_sort_failures"] = stats.monthly_sort_failures
+        log_event("RUN_SUMMARY", **summary_fields)
 
         if args.write_manifest and manifest_rows:
             manifest_path = outdir / "download_manifest.json"
             with open(manifest_path, "w", encoding="utf-8") as handle:
                 json.dump(manifest_rows, handle, indent=2)
-            print(f"Manifest written: {manifest_path}")
+            log_event("MANIFEST_WRITTEN", path=manifest_path)
     except SystemExit as exc:
         summary_status = "failed"
         fatal_error = str(exc)
@@ -2377,9 +3057,9 @@ def main() -> None:
         }
         try:
             summary_json_path.write_text(json.dumps(run_summary, indent=2), encoding="utf-8")
-            print(f"Summary written: {summary_json_path}")
+            log_event("SUMMARY_WRITTEN", path=summary_json_path)
         except Exception as exc:  # noqa: BLE001
-            print(f"Warning: unable to write summary json: {exc}")
+            log_event("SUMMARY_WRITE_WARN", error=str(exc))
         finally:
             sys.stdout = original_stdout
             sys.stderr = original_stderr

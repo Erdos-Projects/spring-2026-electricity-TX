@@ -12,16 +12,13 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
 
 - `DATA_DOWNLOAD.md`
   - Use for download execution and troubleshooting.
-  - Includes setup, credentials, canonical command template, dataset reference, DNS troubleshooting, and Git LFS steps.
+  - Includes setup, credentials, canonical command template, structured run-log events, DNS troubleshooting, and Git LFS steps.
 - `DATA_ESTIMATION.md`
   - Use for dataset-selection planning before download runs.
   - Includes time/storage estimation methods, latest estimate tables, and scenario recommendations (`<=10GB`, `<=50h`).
 - `DATA_CLEANING.md`
   - Use for cleaning and preparing analysis-ready data.
   - Includes dedupe keys, interval handling (`NP6-905-CD`), validation checklist, and EDA merge template.
-- `LOCAL_DOWNLOAD_NOTES.md`
-  - Use only for personal overrides (`START_DATE`/`WINDOW_MONTHS` values).
-  - Keep download instructions in `DATA_DOWNLOAD.md`.
 - `GIT_TERMINAL.md`
   - Beginner guide for Git in terminal.
   - Covers fetch/pull, local edits, stage, commit, push, merge workflows, and terminal setup for Codex/Gemini.
@@ -31,7 +28,7 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
   - New clone quick start: `mkdir -p config && cp config/download.sample.yaml config/download.yaml`
 - `Makefile`
   - Shortcut commands for downloader operations.
-  - Run `make help` to see `download`, `last-run`, `resume-status`, `estimate-time`, and `estimate-size`.
+  - Run `make help` to see `download`, `sort_csv`, `last-run`, `resume-status`, `estimate-time`, and `estimate-size`.
   - For `make download`, prefer `DOWNLOAD_CONFIG=...` and `DOWNLOAD_FLAGS="..."`.
 
 Use these runbooks as the default workflow.
@@ -40,6 +37,7 @@ Use these runbooks as the default workflow.
 
 - `scripts/download_ercot_public_reports.py`
   - Main downloader for ERCOT public reports API.
+  - Supports checkpoint resume, structured event logging, and configurable progress log frequency.
 - `scripts/list_ercot_analysis_datasets.py`
   - Prints recommended dataset IDs by profile with reasons.
 - `scripts/ercot_dataset_catalog.py`
@@ -53,6 +51,7 @@ Use these runbooks as the default workflow.
 2. Download raw data:
    - Follow `DATA_DOWNLOAD.md` and use Makefile commands.
    - Start with `make help`, then use `make download`, `make last-run`, `make resume-status`.
+   - Use `make sort_csv` only when you want to re-sort existing local monthly CSVs without re-downloading.
 3. Clean and merge for analysis:
    - Follow `DATA_CLEANING.md`.
 4. Run notebooks/EDA on processed outputs.
@@ -72,5 +71,12 @@ For all Git-related operations, use `GIT_TERMINAL.md`:
   - `data/raw/ercot/<DATASET_ID>/<YYYY>/<MM>/...`
 - Processed outputs:
   - `data/processed/ercot/<DATASET_ID>/...`
+- Run artifacts:
+  - `logs/downloads/<YYYYMMDD_HHMMSS>/run.log`
+  - `logs/downloads/<YYYYMMDD_HHMMSS>/failures.csv`
+  - `logs/downloads/<YYYYMMDD_HHMMSS>/summary.json`
+- Resume checkpoints:
+  - `state/<DATASET_ID>.json`
+  - `state/<DATASET_ID>.archive_docs.jsonl`
 
 When monthly consolidation is used, `.docids` sidecar files are written next to monthly CSVs for safe resume and deduplication.

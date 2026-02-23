@@ -28,7 +28,7 @@ EARLIEST_BY_DATASET: Dict[str, Optional[date]] = {
 }
 
 DAY_COMPLETE_RE = re.compile(
-    r"^DAY COMPLETE\s+dataset=(?P<dataset>[A-Z0-9-]+)\s+date=(?P<day>[0-9-]+)"
+    r"^DAY[_ ]COMPLETE\s+dataset=(?P<dataset>[A-Z0-9-]+)\s+date=(?P<day>[0-9-]+)"
     r".*completed_at=(?P<completed_at>[^\\s]+)"
 )
 
@@ -320,7 +320,7 @@ def main() -> None:
     print(f"As-of date: {args.as_of.isoformat()}")
     print(f"Logs directory: {logs_dir}")
     print(f"Data root: {data_root}")
-    print(f"DAY COMPLETE events found: {len(events)}")
+    print(f"DAY_COMPLETE events found: {len(events)}")
     print(f"Mtime fallback: {'enabled' if args.fallback_from_mtime else 'disabled'}")
     print("")
     print("Per-dataset day-based estimate")

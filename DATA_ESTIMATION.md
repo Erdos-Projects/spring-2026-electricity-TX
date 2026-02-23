@@ -88,7 +88,7 @@ Current local status may differ after later runs.
 ## 3. Time Estimate (Log-and-Fallback Method)
 
 Method (Dec `2025` snapshot):
-- Primary: parse `DAY COMPLETE` events from `logs/downloads/*/run.log` and compute per-dataset day-interval seconds.
+- Primary: parse `DAY_COMPLETE` events from `logs/downloads/*/run.log` and compute per-dataset day-interval seconds.
 - Secondary: if primary has too few intervals (`<3`), estimate day time by local CSV mtime span divided by covered day intervals.
 - Tertiary: if both primary/secondary fail for a dataset but at least one dataset has an estimate, use global mean seconds/day across estimable datasets.
 - Projection:
@@ -174,7 +174,7 @@ Method notes:
 - `NP3-912-ER` is excluded until earliest date/endpoint is confirmed.
 
 Time source legend:
-- `time_source=log-daily`: estimate comes from `DAY COMPLETE` events in `logs/downloads/*/run.log`.
+- `time_source=log-daily`: estimate comes from `DAY_COMPLETE` events in `logs/downloads/*/run.log`.
 - `time_source=fallback-mtime`: estimate comes from local CSV file modification-time span divided by covered-day intervals when log-daily samples are insufficient.
 - `time_source=global-fallback`: estimate uses the mean sec/day across datasets with valid estimates (only used if both methods above are unavailable).
 

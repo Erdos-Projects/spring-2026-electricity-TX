@@ -1,0 +1,6 @@
+
+- We look at the Texas electricity price data to identify tail risks in power pricing.
+
+- Stakeholders: regulators, market participants, general public
+
+- KPI: recall

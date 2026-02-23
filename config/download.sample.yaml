@@ -23,7 +23,7 @@ download:
   consolidate_monthly: true
   delete_source_after_consolidation: true
   download_order: "newest-first"
-  sort_monthly_output: "descending"
+  sort_monthly_output: "ascending"
   sort_existing_monthly: true
   file_timing_frequency: "daily"
   write_manifest: true

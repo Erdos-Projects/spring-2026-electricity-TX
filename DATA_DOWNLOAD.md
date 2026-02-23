@@ -140,6 +140,8 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP3-911-ER \
 --from-date 2016-01-01 \
 --to-date 2025-12-31 \
+--bulk-chunk-size 256 \
+--bulk-progress-every 10 \
 --archive-progress-pages 10 \
 --file-timing-frequency daily"
 ```
@@ -153,6 +155,8 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP3-911-ER \
 --from-date 2025-11-01 \
 --to-date 2025-12-31 \
+--bulk-chunk-size 256 \
+--bulk-progress-every 10 \
 --file-timing-frequency daily"
 ```
 
@@ -180,12 +184,26 @@ Add these reliability/network flags only when needed:
 - `--max-retries 10 --retry-sleep-seconds 4`
 - `--archive-listing-retries 20`
 - `--max-consecutive-network-failures 8 --network-failure-cooldown-seconds 30`
+- `--bulk-progress-every 20` (quieter bulk progress logs)
+
+Bulk download tuning:
+- `--bulk-chunk-size` controls how many docs are requested in one bulk call.
+- Default is `256`.
+- Allowed range is natural numbers `1..2048`.
+- Use smaller values when troubleshooting partial chunk failures; use larger values only if API behavior is stable.
+- `--bulk-progress-every` controls how often `BULK_REQUEST`/`BULK_DONE`/`BULK_SKIP` are printed.
+- Default is `10`.
+- First and last chunk are always printed.
+- Set `0` to print only first and last chunk progress (still prints `BULK_WARN`/`BULK_ERROR` immediately).
 
 Expected behavior:
 - `--to-date`: if omitted, defaults to `2025-12-31`.
-- `--download-order newest-first`: download backward in time.
-- `--sort-monthly-output descending`: keep monthly CSV rows newest-to-oldest by timestamp.
+- `--download-order` follows config/CLI. Script default is `api`; sample config uses `newest-first`.
+- `--sort-monthly-output` follows config/CLI. Script default is `ascending`.
+- `--sort-monthly-output descending` remains available when newest-to-oldest output is needed.
 - `--sort-existing-monthly`: sorts only existing monthly CSV files within the active dataset date range.
+- `--bulk-chunk-size`: default `256`, allowed `1..2048`.
+- `--bulk-progress-every`: default `10`, `0` means first/last chunk only.
 - `.docids` sidecars prevent duplicate appends on rerun.
 - `--state-dir` + `--resume-state` (default on): writes per-dataset checkpoints in `state/<DATASET>.json`.
 - `--logs-dir`: writes one folder per run with `run.log`, `failures.csv`, and `summary.json`.
@@ -218,6 +236,45 @@ Set `--archive-progress-pages` to:
 - `100`
 - `1000` (least verbose)
 
+### Bulk progress frequency
+
+Set `--bulk-progress-every` to:
+- `0` (first/last chunk progress only)
+- `10` (default)
+- `20` or `50` (quieter progress logging)
+
+### Structured run log events
+
+`run.log` now uses one-line structured events:
+- Format: `EVENT_NAME key=value key=value ...`
+- Values are shell-safe where possible; complex text is JSON-quoted.
+
+Common events to watch:
+- Run setup: `RUN_PATHS`, `RUN_CONFIG`, `RESUME_STATE`
+- Dataset lifecycle: `DATASET_SELECTED`, `DATASET_START`, `DATASET_DONE`, `DATASET_SKIP`, `DATASET_EMPTY`
+- Archive/listing: `ARCHIVE_LISTING_PROGRESS`, `ARCHIVE_LISTING_RETRY`, `ARCHIVE_LISTING_ERROR`
+- Parse plan and resume: `DOC_PARSE_PLAN`, `DOC_RESUME`, `DOC_WARN`
+- Bulk download: `BULK_QUEUE`, `BULK_REQUEST`, `BULK_DONE`, `BULK_SKIP`, `BULK_WARN`, `BULK_ERROR`
+- Per-file timing: `FILE_COMPLETE`, `DAY_COMPLETE`, `STAMPDATE_COMPLETE`, `MONTH_COMPLETE`
+- Final summary: `RUN_SUMMARY`, `MANIFEST_WRITTEN`, `SUMMARY_WRITTEN`
+
+Quick filters:
+
+```bash
+# newest run log
+LOG="$(ls -1t logs/downloads/*/run.log | head -n 1)"
+
+# high-level health
+rg -n "RUN_SUMMARY|DATASET_DONE|BULK_ERROR|DOWNLOAD_ERROR|ARCHIVE_LISTING_ERROR|MONTHLY_SORT_ERROR" "$LOG"
+
+# bulk throughput
+rg -n "BULK_REQUEST|BULK_DONE|BULK_WARN|BULK_ERROR" "$LOG"
+```
+
+Note:
+- `BULK_REQUEST`/`BULK_DONE`/`BULK_SKIP` follow `--bulk-progress-every`.
+- `BULK_WARN` and `BULK_ERROR` are always printed immediately.
+
 ## 4. Select Datasets (Priority + Usage)
 
 Use `DATA_ESTIMATION.md` for dataset metadata and planning:
@@ -241,12 +298,14 @@ Use these as your default download operations:
 ```bash
 make help
 make download
+make sort_csv
 make last-run
 make resume-status
 ```
 
 Notes:
 - Run downloads with the canonical command in Section 2.
+- `make sort_csv` is optional for re-sorting already-downloaded local monthly CSV files.
 - Use `DATA_ESTIMATION.md` for size/time estimate workflows.
 
 ## 6. Resume Failed Runs and Handle Errors
@@ -261,6 +320,8 @@ When a run fails:
 `logs/downloads/<YYYYMMDD_HHMMSS>/run.log`
 `logs/downloads/<YYYYMMDD_HHMMSS>/failures.csv`
 `logs/downloads/<YYYYMMDD_HHMMSS>/summary.json`
+- `failures.csv` stage values now include granular stages such as:
+`bulk-download`, `bulk-write`, `download`, `monthly-sort`, `fatal`
 
 Do not delete `.docids` unless you intentionally want to rebuild monthly files.
 Do not delete `state/*.json` or `state/*.archive_docs.jsonl` unless you intentionally want to restart listing/process progress.
@@ -347,6 +408,16 @@ Verify before push:
 ```bash
 git lfs ls-files | rg "NP6-346-CD" | head -n 20
 rg "NP6-346-CD" .gitattributes
+```
+
+Optional: lock all files for one dataset (to reduce accidental edits):
+
+```bash
+# NP6-346-CD shortcut
+make lock-346
+
+# generic form
+make lock-dataset LOCK_DATASET=NP6-346-CD
 ```
 
 Important:

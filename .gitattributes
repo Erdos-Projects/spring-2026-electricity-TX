@@ -1,1 +1,2 @@
-data/raw/ercot/NP6-346-CD/**/*.csv filter=lfs diff=lfs merge=lfs -text
+data/raw/ercot/NP6-346-CD/**/*.csv filter=lfs diff=lfs merge=lfs -text lockable
+*.csv filter=lfs diff=lfs merge=lfs -text lockable

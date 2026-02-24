@@ -10,6 +10,16 @@
 # Only track consolidated monthly outputs for this dataset.
 !/data/raw/ercot/NP6-346-CD/**/*.csv
 !/data/raw/ercot/NP6-346-CD/**/*.csv.docids
+# Track curated sample data only (Dec 2025 monthly CSV files).
+!/data/sample/
+/data/sample/*
+!/data/sample/README.md
+!/data/sample/ercot/
+/data/sample/ercot/*
+!/data/sample/ercot/**/
+!/data/sample/ercot/**/2025/
+!/data/sample/ercot/**/2025/12/
+!/data/sample/ercot/**/2025/12/*.csv
 # Do not upload 2026 raw data files (applies to all datasets, including NP6-346-CD).
 /data/raw/ercot/**/2026/**/*.csv
 /data/raw/ercot/**/2026/**/*.csv.docids

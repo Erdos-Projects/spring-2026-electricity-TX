@@ -15,7 +15,7 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
   - Includes setup, credentials, canonical command template, structured run-log events, DNS troubleshooting, and Git LFS steps.
 - `DATA_ESTIMATION.md`
   - Use for dataset-selection planning before download runs.
-  - Includes time/storage estimation methods, latest estimate tables, and scenario recommendations (`<=10GB`, `<=50h`).
+  - Includes current coverage, time snapshot from run logs, and actual downloaded size snapshot.
 - `DATA_CLEANING.md`
   - Use for cleaning and preparing analysis-ready data.
   - Includes dedupe keys, interval handling (`NP6-905-CD`), validation checklist, and EDA merge template.
@@ -46,8 +46,8 @@ Use these runbooks as the default workflow.
 ## Typical Workflow
 
 1. Choose datasets for your task:
-   - Use `scripts/list_ercot_analysis_datasets.py`, `DATA_DOWNLOAD.md` (dataset catalog), and `DATA_ESTIMATION.md` (size/time planning).
-   - Optionally run `make estimate-time` and `make estimate-size` before deciding `--from-date`.
+   - Use `scripts/list_ercot_analysis_datasets.py`, `DATA_DOWNLOAD.md` (dataset selection and run commands), and `DATA_ESTIMATION.md` (size/time planning).
+   - Optionally run `make estimate-time` and `make estimate-size` to refresh local planning snapshots.
 2. Download raw data:
    - Follow `DATA_DOWNLOAD.md` and use Makefile commands.
    - Start with `make help`, then use `make download`, `make last-run`, `make resume-status`.

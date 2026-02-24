@@ -11,9 +11,8 @@ Purpose:
 Scope:
 - This file is download-operations only.
 - For storage/time planning and dataset-selection estimates, use `DATA_ESTIMATION.md`.
-- Current upload policy: raw `2026` CSV data files are ignored by git for now (including `NP6-346-CD`).
-- Safety reminder: for shared/team runs, do not download `2026` data (`--to-date` should stay `<= 2025-12-31`).
-- If `2026` data already exists locally, keep it local-only and do not stage/push it.
+- Recommended shared download range in this repo: `2017-07-01` to `2024-12-31`.
+- Pass explicit `--from-date` and `--to-date` in shared runs to avoid accidental default drift.
 
 ## Table of Contents
 
@@ -109,21 +108,25 @@ Notes:
 - `config/download.yaml` is local-only and git-ignored, so each person should create their own copy.
 - To avoid accidental overwrite, use `cp -i config/download.sample.yaml config/download.yaml`.
 
-After copy, the default date range is:
-- `from_date: 2016-01-01` (10-year default range)
-- `to_date: 2025-12-31` (script default when `--to-date` is omitted)
+Downloader code defaults (when date flags are omitted):
+- `from_date: 2016-01-01`
+- `to_date: 2025-12-31`
+
+Shared-run baseline in this repo:
+- `--from-date 2017-07-01`
+- `--to-date 2024-12-31`
 
 If credentials are exported in terminal (`ERCOT_API_USERNAME`, `ERCOT_API_PASSWORD`, `ERCOT_SUBSCRIPTION_KEY`), you do not need to put credentials in `config/download.yaml`.
 
 Shared-run rule:
-- Do not include `2026` in shared date ranges.
-- Set `--to-date 2025-12-31` when using explicit start/end ranges.
+- Use explicit start/end dates in every command.
+- Keep shared runs on `2017-07-01` to `2024-12-31` unless the team agrees otherwise.
 
 Readable `make download` arguments:
 - `DOWNLOAD_CONFIG`: path to config file (default `config/download.yaml`)
 - `DOWNLOAD_FLAGS`: downloader CLI flags passed after `--config`
 
-Default run command (recommended). Edit dataset list and date range each time:
+Shared-run command template (recommended). Edit dataset list and date range each time:
 
 ```bash
 make download DOWNLOAD_FLAGS="--datasets-only \
@@ -135,11 +138,10 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP4-523-CD \
 --dataset NP3-233-CD \
 --dataset NP6-788-CD \
---dataset NP6-331-CD \
 --dataset NP4-188-CD \
 --dataset NP3-911-ER \
---from-date 2016-01-01 \
---to-date 2025-12-31 \
+--from-date 2017-07-01 \
+--to-date 2024-12-31 \
 --bulk-chunk-size 256 \
 --bulk-progress-every 10 \
 --archive-progress-pages 10 \
@@ -150,33 +152,37 @@ Dataset override template (explicit CLI dataset list):
 
 ```bash
 make download DOWNLOAD_FLAGS="--datasets-only \
---dataset NP6-331-CD \
+--dataset NP6-788-CD \
 --dataset NP4-188-CD \
 --dataset NP3-911-ER \
---from-date 2025-11-01 \
---to-date 2025-12-31 \
+--from-date 2024-11-01 \
+--to-date 2024-12-31 \
 --bulk-chunk-size 256 \
 --bulk-progress-every 10 \
 --file-timing-frequency daily"
 ```
+
+Range note:
+- `NP6-331-CD` currently starts at `2025-12-04`; include it only when `--to-date` reaches that period.
 
 `--datasets-only` selection behavior:
 - If CLI `--dataset` flags are present, only those CLI dataset IDs are used.
 - If no CLI `--dataset` flags are present, the downloader uses `download.datasets` from `config/download.yaml`.
 
 Date parameters (clear rules):
-1. `--from-date` is optional; if omitted, default is `2016-01-01` (10-year default range ending `2025-12-31`).
-2. `--to-date` is optional; if omitted, default is `2025-12-31`.
-3. Download range is inclusive (`from-date` through `to-date`).
+1. For shared runs in this repo, always pass both `--from-date` and `--to-date`.
+2. Shared baseline range is `2017-07-01` to `2024-12-31`.
+3. If omitted, downloader defaults are `2016-01-01` and `2025-12-31`.
+4. Download range is inclusive (`from-date` through `to-date`).
 
 Examples:
 
 ```bash
-# Mode A: use default end date (2025-12-31)
-make download DOWNLOAD_FLAGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01"
+# Fixed shared-range example
+make download DOWNLOAD_FLAGS="--datasets-only --dataset NP3-233-CD --from-date 2017-07-01 --to-date 2024-12-31"
 
-# Mode B: fixed range (from + to)
-make download DOWNLOAD_FLAGS="--datasets-only --dataset NP3-233-CD --from-date 2025-11-01 --to-date 2025-12-31"
+# Fixed one-month example
+make download DOWNLOAD_FLAGS="--datasets-only --dataset NP3-233-CD --from-date 2024-11-01 --to-date 2024-12-31"
 ```
 
 Add these reliability/network flags only when needed:
@@ -197,10 +203,11 @@ Bulk download tuning:
 - Set `0` to print only first and last chunk progress (still prints `BULK_WARN`/`BULK_ERROR` immediately).
 
 Expected behavior:
-- `--to-date`: if omitted, defaults to `2025-12-31`.
 - `--download-order` follows config/CLI. Script default is `api`; sample config uses `newest-first`.
 - `--sort-monthly-output` follows config/CLI. Script default is `ascending`.
-- `--sort-monthly-output descending` remains available when newest-to-oldest output is needed.
+- `--monthly-sort-strategy` follows config/CLI. Script default is `auto`:
+  uses `forecast-aware` when both target-time and issue-time columns exist, otherwise `timestamp`.
+- `--sort-monthly-output descending` remains available for reverse order outputs.
 - `--sort-existing-monthly`: sorts only existing monthly CSV files within the active dataset date range.
 - `--bulk-chunk-size`: default `256`, allowed `1..2048`.
 - `--bulk-progress-every`: default `10`, `0` means first/last chunk only.
@@ -278,9 +285,9 @@ Note:
 ## 4. Select Datasets (Priority + Usage)
 
 Use `DATA_ESTIMATION.md` for dataset metadata and planning:
-- master dataset catalog (tier/type/frequency/earliest date)
-- storage/time estimate tables
-- scenario recommendations for `--from-date` decisions (`<=10GB`, `<=50h`)
+- observed dataset starts and availability notes
+- current local size/time snapshots from actual logs and downloaded files
+- current coverage snapshot
 
 Quick helpers for choosing dataset IDs:
 
@@ -288,8 +295,7 @@ Quick helpers for choosing dataset IDs:
 python3 scripts/list_ercot_analysis_datasets.py
 ```
 
-For storage/time estimation and planning (what to download and how far back), use:
-- `DATA_ESTIMATION.md`
+For storage/time estimation and planning, use `DATA_ESTIMATION.md`.
 
 ## 5. Makefile Shortcuts
 

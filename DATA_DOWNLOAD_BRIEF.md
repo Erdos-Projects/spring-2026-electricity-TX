@@ -17,6 +17,8 @@ Supported datasets in this workflow:
 - `NP4-188-CD`
 - `NP3-233-CD`
 - `NP3-911-ER`
+- `NP4-190-CD` (data starts 2014-05-01)
+- `NP6-345-CD` (data starts 2014-05-01)
 
 ## 1) Enter project root
 Why this step: make sure config and script paths resolve.
@@ -80,6 +82,8 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP4-188-CD \
 --dataset NP3-233-CD \
 --dataset NP3-911-ER \
+--dataset NP4-190-CD \
+--dataset NP6-345-CD \
 --from-date 2017-07-01 \
 --to-date 2024-12-31 \
 --sort-monthly-output ascending \
@@ -92,6 +96,7 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 
 Range note:
 - `NP6-331-CD` starts at `2025-12-04`, so it is intentionally omitted from the `2017-07-01` to `2024-12-31` command.
+- `NP4-190-CD` and `NP6-345-CD` have data from `2014-05-01`. To download the full history before the shared window, run a separate command with `--from-date 2014-05-01 --to-date 2017-06-30`.
 
 ## 6) Check run output
 Why this step: verify summary, failures, and latest log quickly.
@@ -184,8 +189,8 @@ python3 scripts/backfill_post_datetime.py \
 ```
 
 Large dataset note (NP6-905-CD):
-- NP6-905-CD monthly CSVs are ~108MB with ~2.9M rows and all `postDateTime` empty.
-- Use `--mode rebuild` to skip loading the existing monthly CSV entirely (~29s/month vs ~47s):
+- NP6-905-CD has been fully backfilled (240.9M rows, 104 months, 0 missing).
+- Use `--mode rebuild` to skip loading the existing monthly CSV entirely (~29s/month vs ~47s) if re-backfilling is needed:
 
 ```bash
 python3 scripts/backfill_post_datetime.py \
@@ -201,6 +206,19 @@ Backfill performance summary:
 - Missing source files are fetched in bulk (256 docs per POST request, not one GET per doc).
 - Row counting uses fast line splitting (9.4× faster than DictReader).
 - Each source file is read once and cached in memory for the full backfill pass.
+
+## postDateTime Backfill Status (as of 2026-02-27)
+
+All priority-1 datasets and NP3-565-CD have been fully backfilled, verified, sorted ascending, and source files archived:
+
+| Dataset | Months | Rows | Fill | Archived to |
+|---|---:|---:|---|---|
+| `NP6-346-CD` | 104 | — | 100% | `data/archive/ercot/NP6-346-CD/` |
+| `NP3-233-CD` | 104 | 13.7M | 100% | `data/archive/ercot/NP3-233-CD/` |
+| `NP6-905-CD` | 104 | 240.9M | 100% | `data/archive/ercot/NP6-905-CD/` |
+| `NP3-565-CD` | 104 | 105.5M | 100% | `data/archive/ercot/NP3-565-CD/` |
+
+`NP6-788-CD` has no `postDateTime` column (uses `SCEDTimestamp`); backfill does not apply.
 
 ## 9) Clear credentials
 Why this step: remove secrets from current shell session.

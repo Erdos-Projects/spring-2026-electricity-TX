@@ -65,6 +65,8 @@ Current snapshot:
 | `NP4-188-CD` | DAM Clearing Prices for Capacity | Ancillary — DA | Per DAM run (daily) | Day-ahead clearing prices for ancillary service capacity. Pairs with NP6-331-CD for DA vs RT ancillary analysis. |
 | `NP3-233-CD` | Hourly Resource Outage Capacity | Reliability | Hourly | Hourly forced and planned outage capacity (MW) by resource type. Critical input for explaining scarcity events and price spikes. |
 | `NP3-911-ER` | 2-Day DAM Ancillary Services Reports | Ancillary — DA detail | Daily | Confidentiality-expired (2-day lag) detailed DAM ancillary service bids and offers by resource. |
+| `NP4-190-CD` | DAM Settlement Point Prices | Prices — DA | Per DAM run (daily) | Day-ahead settlement point prices for every resource node, hub, and load zone. DA complement to RT `NP6-905-CD`. Available from 2014-05-01. |
+| `NP6-345-CD` | Actual System Load by Weather Zone | Load — actual | Hourly | Same actual load data as `NP6-346-CD` but broken out by weather zone instead of forecast zone. Available from 2014-05-01. |
 
 ### Candidate datasets (not yet downloaded)
 
@@ -72,9 +74,7 @@ Identified from ERCOT public-reports API catalog on 2026-02-27. All are Active w
 
 | Dataset ID | Official Name | Category | Freq | Records | Description | Relation to existing |
 |---|---|---|---|---|---|---|
-| `NP4-190-CD` | DAM Settlement Point Prices | Prices — DA | Per DAM run (daily) | ~4,321 | Day-ahead settlement point prices for every resource node, hub, and load zone. Daily posting. | DA complement to our RT `NP6-905-CD` |
 | `NP4-183-CD` | DAM Hourly LMPs | Prices — DA | Per DAM run (daily) | ~4,321 | Day-ahead hourly LMPs for all nodes, zones, and hubs. | DA complement to our RT `NP6-788-CD` |
-| `NP6-345-CD` | Actual System Load by Weather Zone | Load — actual | Hourly | ~4,319 | Same actual load data as `NP6-346-CD` but broken out by weather zone instead of forecast zone. | Alternative geographic cut of `NP6-346-CD` |
 | `NP3-566-CD` | Seven-Day Load Forecast by Model and Study Area | Load — forecast | Hourly | ~59,070 | Same 7-day load forecast as `NP3-565-CD` but broken out by study area instead of weather zone. | Alternative geographic cut of `NP3-565-CD` |
 | `NP6-322-CD` | SCED System Lambda | Prices — RT | Per SCED (~5 min) | ~1,257,000 | Real-time system lambda from every SCED run. RT complement to our DAM `NP4-523-CD`. Very large — ~5-min resolution. | RT complement to `NP4-523-CD` |
 | `NP6-332-CD` | Real-Time Clearing Prices for Capacity by SCED Interval | Ancillary — RT | Per SCED (~5 min) | ~24,538 | RT ancillary clearing prices at per-SCED granularity. Higher-resolution version of `NP6-331-CD`. | More granular version of `NP6-331-CD` |
@@ -106,6 +106,8 @@ Observed dataset starts in the current local/API-log snapshot:
 | `NP4-188-CD` | DAM ancillary prices | `2017-07-02` | `2017-07-02` |
 | `NP3-233-CD` | Outage capacity | `2017-07-01` | `2017-07-01` |
 | `NP3-911-ER` | 2-Day DAM AS Reports | `2017-06-29` | `2017-07-01` |
+| `NP4-190-CD` | DAM settlement prices | `2014-05-01` | `2014-05-01` |
+| `NP6-345-CD` | Load (actual, weather zone) | `2014-05-01` | `2014-05-01` |
 
 ## 2. Coverage Snapshot (2025)
 

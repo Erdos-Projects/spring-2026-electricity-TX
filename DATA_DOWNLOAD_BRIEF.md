@@ -32,7 +32,7 @@ Why this step: isolate dependencies for downloader execution.
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
-python3 -m pip install requests pyyaml
+python3 -m pip install requests pyyaml tqdm
 ```
 
 ## 3) Create local config
@@ -42,6 +42,10 @@ Why this step: keep local settings in a git-ignored file.
 mkdir -p config
 cp -i config/download.sample.yaml config/download.yaml
 ```
+
+Config note: `delete_source_after_consolidation` defaults to `false` in the sample config.
+This keeps per-doc source CSVs on disk after monthly consolidation so `backfill_post_datetime.py` can read them.
+Do not set this to `true` until `postDateTime` backfill is complete for all datasets.
 
 ## 4) Export ERCOT credentials
 Why this step: keep secrets out of files and command history.
@@ -103,7 +107,102 @@ Why this step: confirm checkpoint status if you need to rerun after interruption
 make resume-status
 ```
 
-## 8) Clear credentials
+## 8) Add Missing `postDateTime` (No Rebuild)
+Why this step: keep existing monthly files, fill missing `postDateTime`, verify coverage, and remove redundant per-doc source files.
+
+Date range used here:
+- `2017-07-01` to `2026-02-26` (today).
+
+Dry run first:
+
+```bash
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP3-911-ER \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order none \
+  --fetch-missing-post-datetime \
+  --download-missing-sources \
+  --bulk-chunk-size 256 \
+  --dry-run
+```
+
+Apply + verify/sort + cleanup:
+
+```bash
+# 1) backfill (bulk downloads missing sources automatically, 256 docs per request)
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP3-911-ER \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order none \
+  --fetch-missing-post-datetime \
+  --download-missing-sources \
+  --bulk-chunk-size 256
+
+# 2) verify + enforce ascending order if needed
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP3-911-ER \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order ascending \
+  --verify
+
+# 3) delete redundant source files once coverage is complete
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP3-911-ER \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order none \
+  --delete-redundant-sources
+
+# 3-alt) archive redundant source files instead of deleting
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP3-911-ER \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order none \
+  --archive-redundant-sources-dir data/archive/ercot
+```
+
+Known-good single-command rebuild + verify:
+
+```bash
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP4-732-CD \
+  --data-root data/raw/ercot \
+  --state-dir state \
+  --manifest-path data/raw/ercot/download_manifest.json \
+  --mode rebuild \
+  --order ascending \
+  --verify
+```
+
+Large dataset note (NP6-905-CD):
+- NP6-905-CD monthly CSVs are ~108MB with ~2.9M rows and all `postDateTime` empty.
+- Use `--mode rebuild` to skip loading the existing monthly CSV entirely (~29s/month vs ~47s):
+
+```bash
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP6-905-CD \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode rebuild \
+  --order none \
+  --bulk-chunk-size 256
+```
+
+Backfill performance summary:
+- Missing source files are fetched in bulk (256 docs per POST request, not one GET per doc).
+- Row counting uses fast line splitting (9.4× faster than DictReader).
+- Each source file is read once and cached in memory for the full backfill pass.
+
+## 9) Clear credentials
 Why this step: remove secrets from current shell session.
 
 ```bash

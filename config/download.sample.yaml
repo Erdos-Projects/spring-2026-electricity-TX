@@ -21,7 +21,7 @@ download:
   # to_date: "2025-12-31"
   outdir: "data/raw/ercot"
   consolidate_monthly: true
-  delete_source_after_consolidation: true
+  delete_source_after_consolidation: false
   download_order: "newest-first"
   sort_monthly_output: "ascending"
   sort_existing_monthly: true

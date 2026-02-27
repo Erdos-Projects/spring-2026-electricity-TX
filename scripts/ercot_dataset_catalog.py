@@ -22,7 +22,7 @@ DATASETS: Dict[str, Dict[str, str]] = {
         "reason": "Core variable for wind variability, curtailment pressure, and price impact analysis.",
     },
     "NP4-745-CD": {
-        "title": "Solar Power Production - Hourly Averaged Actual and Forecasted Values by Geographical Region",
+        "title": "Solar Power Production - Hourly Averaged Actual and Forecasted Values",
         "category": "renewables",
         "reason": "Needed for solar ramp and net-load analysis in daylight hours.",
     },
@@ -57,14 +57,9 @@ DATASETS: Dict[str, Dict[str, str]] = {
         "reason": "Critical reliability input for explaining scarcity and price spikes.",
     },
     "NP3-911-ER": {
-        "title": "COP HSL and Actual Output for WGRs, PVGRs and ONLRTPF",
-        "category": "renewables",
-        "reason": "Resource-level capability vs output for deeper renewable performance diagnostics.",
-    },
-    "NP3-912-ER": {
-        "title": "Temperature and Weather Zone Load Forecast",
-        "category": "weather",
-        "reason": "Weather driver for load sensitivity, peak risk, and seasonality analysis.",
+        "title": "2-Day DAM Ancillary Services Reports",
+        "category": "ancillary_services",
+        "reason": "Confidentiality-expired (2-day lag) detailed DAM ancillary service bids and offers by resource.",
     },
 }
 
@@ -96,7 +91,6 @@ PROFILES: Dict[str, Dict[str, object]] = {
         "datasets": [
             "NP3-233-CD",
             "NP3-911-ER",
-            "NP3-912-ER",
             "NP6-346-CD",
             "NP3-565-CD",
         ],

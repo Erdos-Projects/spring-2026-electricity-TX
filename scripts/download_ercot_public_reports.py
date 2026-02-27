@@ -25,6 +25,11 @@ try:
     import yaml
 except ImportError:  # pragma: no cover - optional dependency fallback
     yaml = None
+try:
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover - optional progress bar
+    def tqdm(iterable, **_):  # type: ignore[misc]
+        return iterable
 
 from ercot_dataset_catalog import (
     DATASETS,
@@ -46,6 +51,13 @@ DEFAULT_RANGE_YEARS = 10
 DEFAULT_FROM_DATE = date(DEFAULT_TO_DATE.year - DEFAULT_RANGE_YEARS + 1, 1, 1)
 CSV_PARSE_CACHE_SIZE = 262144
 MONTHLY_SORT_CACHE_VERSION = 1
+POST_DATETIME_COLUMN = "postDateTime"
+POST_DATETIME_COLUMN_ALIASES = (
+    POST_DATETIME_COLUMN,
+    "postDatetime",
+    "PostingTime",
+    "post_datetime",
+)
 # TODO(after-full-download): Evaluate storage-format migration (.csv.gz or parquet).
 
 
@@ -273,6 +285,8 @@ def config_to_parser_defaults(config_data: Dict[str, Any]) -> Dict[str, Any]:
         "download_sort_existing_monthly": "sort_existing_monthly",
         "write_manifest": "write_manifest",
         "download_write_manifest": "write_manifest",
+        "disable_bulk_download": "disable_bulk_download",
+        "download_disable_bulk_download": "disable_bulk_download",
         "print_file_timing": "print_file_timing",
         "download_print_file_timing": "print_file_timing",
         "resume_state": "resume_state",
@@ -317,6 +331,16 @@ def _safe_int(value: object, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def format_exception_message(exc: BaseException) -> str:
+    text = str(exc).strip()
+    if text:
+        return text
+    rep = repr(exc).strip()
+    if rep and rep != f"{type(exc).__name__}()":
+        return rep
+    return type(exc).__name__
 
 
 def load_dataset_state(state_path: Path) -> Dict[str, Any]:
@@ -585,7 +609,52 @@ def read_doc_csv_text(path: Path) -> str:
     return read_text_fallback(path.read_bytes())
 
 
-def append_doc_to_monthly_csv(source_path: Path, monthly_path: Path) -> int:
+def detect_post_datetime_column(fieldnames: Sequence[str]) -> Optional[str]:
+    normalized = {
+        name.strip().lower(): name
+        for name in fieldnames
+        if isinstance(name, str) and name.strip()
+    }
+    for candidate in POST_DATETIME_COLUMN_ALIASES:
+        found = normalized.get(candidate.lower())
+        if found:
+            return found
+    return None
+
+
+def migrate_monthly_csv_add_post_datetime(monthly_path: Path) -> List[str]:
+    with open(monthly_path, "r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            return []
+        fieldnames = list(reader.fieldnames)
+        posting_col = detect_post_datetime_column(fieldnames)
+        if posting_col is not None:
+            return fieldnames
+        rows = list(reader)
+
+    migrated_fieldnames = [POST_DATETIME_COLUMN] + fieldnames
+    temp_path = monthly_path.with_suffix(f"{monthly_path.suffix}.tmp")
+    with open(temp_path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=migrated_fieldnames,
+            extrasaction="ignore",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for row in rows:
+            row[POST_DATETIME_COLUMN] = ""
+            writer.writerow(row)
+    temp_path.replace(monthly_path)
+    return migrated_fieldnames
+
+
+def append_doc_to_monthly_csv(
+    source_path: Path,
+    monthly_path: Path,
+    post_datetime: str = "",
+) -> int:
     csv_text = read_doc_csv_text(source_path)
     if not csv_text.strip():
         return 0
@@ -594,6 +663,74 @@ def append_doc_to_monthly_csv(source_path: Path, monthly_path: Path) -> int:
         return 0
     monthly_path.parent.mkdir(parents=True, exist_ok=True)
     has_existing = monthly_path.exists() and monthly_path.stat().st_size > 0
+    existing_has_post_datetime = False
+    if has_existing:
+        with open(monthly_path, "r", encoding="utf-8", newline="") as handle:
+            existing_reader = csv.reader(handle)
+            existing_header = next(existing_reader, [])
+        existing_has_post_datetime = detect_post_datetime_column(existing_header) is not None
+
+    # Keep column alignment stable once monthly output has a postDateTime column,
+    # even when current archive metadata has blank postDatetime.
+    use_structured_append = bool(post_datetime) or existing_has_post_datetime
+    if use_structured_append:
+        reader = csv.DictReader(io.StringIO(csv_text))
+        if not reader.fieldnames:
+            return 0
+        source_fieldnames = list(reader.fieldnames)
+        rows = list(reader)
+        if not rows:
+            return 0
+
+        source_posting_col = detect_post_datetime_column(source_fieldnames)
+        target_posting_col = POST_DATETIME_COLUMN
+        target_fieldnames: List[str]
+
+        if has_existing:
+            # Existing monthly files from older runs may not have postDateTime.
+            # Upgrade once so all future appends use a stable schema.
+            existing_fieldnames = migrate_monthly_csv_add_post_datetime(monthly_path)
+            if existing_fieldnames:
+                target_fieldnames = existing_fieldnames
+                existing_posting_col = detect_post_datetime_column(existing_fieldnames)
+                if existing_posting_col:
+                    target_posting_col = existing_posting_col
+                else:
+                    target_fieldnames = [target_posting_col] + existing_fieldnames
+            else:
+                has_existing = False
+
+        if not has_existing:
+            excluded = {target_posting_col}
+            if source_posting_col and source_posting_col != target_posting_col:
+                excluded.add(source_posting_col)
+            target_fieldnames = [target_posting_col] + [
+                name for name in source_fieldnames if name not in excluded
+            ]
+
+        with open(monthly_path, "a", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=target_fieldnames,
+                extrasaction="ignore",
+                lineterminator="\n",
+            )
+            if not has_existing:
+                writer.writeheader()
+            for row in rows:
+                if source_posting_col and source_posting_col != target_posting_col:
+                    source_value = str(row.get(source_posting_col) or "").strip()
+                    row[target_posting_col] = source_value or post_datetime
+                elif source_posting_col == target_posting_col:
+                    current = str(row.get(target_posting_col) or "").strip()
+                    if not current:
+                        row[target_posting_col] = post_datetime
+                else:
+                    row[target_posting_col] = post_datetime
+                writer.writerow(row)
+        return len(rows)
+
+    # Legacy path: raw line copy when no postDateTime is available in archive metadata.
     payload = lines[1:] if has_existing else lines
     if not payload:
         return 0
@@ -901,7 +1038,15 @@ class ErcotPublicReportsClient:
         self,
         report_id: str,
         doc_ids: List[str],
+        strict_count: bool = True,
     ) -> Dict[str, bytes]:
+        """Bulk-download multiple docs via a single POST request.
+
+        When *strict_count* is True (default, used by the main downloader) the
+        method raises if the response does not contain exactly the requested
+        number of documents.  Pass ``strict_count=False`` for recovery/backfill
+        callers that want to accept a partial response gracefully.
+        """
         ret: Dict[str, bytes] = {}
         url = f"https://api.ercot.com/api/public-reports/archive/{report_id}/download"
         with self._request(
@@ -910,11 +1055,27 @@ class ErcotPublicReportsClient:
             json={"docIds": doc_ids},
         ) as response:
             unzipped = extract_zip_from_memory(response.content)
-            assert len(unzipped) == len(doc_ids)
+            if strict_count and len(unzipped) != len(doc_ids):
+                raise RuntimeError(
+                    "Bulk response count mismatch: "
+                    f"requested={len(doc_ids)} returned={len(unzipped)}."
+                )
             for filename, zipped_doc in unzipped.items():
                 doc_id = filename.split(".", 1)[0]
-                inner_unzipped = extract_zip_from_memory(zipped_doc)
-                assert len(inner_unzipped) == 1
+                try:
+                    inner_unzipped = extract_zip_from_memory(zipped_doc)
+                except Exception:
+                    if strict_count:
+                        raise
+                    continue
+                if len(inner_unzipped) != 1:
+                    if strict_count:
+                        raise RuntimeError(
+                            "Bulk nested ZIP payload mismatch: "
+                            f"doc_id={doc_id or '-'} files={len(inner_unzipped)}."
+                        )
+                    if not inner_unzipped:
+                        continue
                 doc_content = list(inner_unzipped.items())[0][1]
                 ret[doc_id] = doc_content
         return ret
@@ -1066,7 +1227,14 @@ def dataset_subdir_from_doc(doc: Dict[str, object]) -> Path:
 def maybe_extract_zip(path: Path) -> None:
     if path.suffix.lower() != ".zip":
         return
+    target_dir = path.parent.resolve()
     with zipfile.ZipFile(path, "r") as archive:
+        for member in archive.namelist():
+            member_resolved = (target_dir / member).resolve()
+            if not str(member_resolved).startswith(str(target_dir) + os.sep) and member_resolved != target_dir:
+                raise RuntimeError(
+                    f"ZIP path traversal rejected: member {member!r} resolves outside target directory."
+                )
         archive.extractall(path.parent)
 
 
@@ -1094,63 +1262,69 @@ def list_archive_docs_with_retries(
 ) -> List[Dict[str, object]]:
     docs: List[Dict[str, object]] = list(seed_docs or [])
     page = max(1, start_page)
-    while True:
-        listing_attempt = 0
+    _list_pbar = tqdm(desc=f"Listing {dataset_id}", unit="page", leave=False)
+    try:
         while True:
-            try:
-                rows = client.list_archive_page(
-                    archive_url=archive_url,
-                    post_datetime_from=post_datetime_from,
-                    post_datetime_to=post_datetime_to,
-                    page_size=page_size,
-                    page=page,
-                )
-                break
-            except requests.HTTPError as exc:
-                status = exc.response.status_code if exc.response is not None else None
-                if status == 429 and listing_attempt < archive_listing_retries:
-                    listing_attempt += 1
-                    retry_after = (
-                        parse_retry_after_seconds(exc.response.headers.get("Retry-After"))
-                        if exc.response is not None
-                        else 0.0
-                    )
-                    cooldown_seconds = max(
-                        retry_after,
-                        retry_sleep_seconds * (2 ** listing_attempt),
-                    )
-                    log_event(
-                        "ARCHIVE_LISTING_RETRY",
-                        dataset=dataset_id,
+            listing_attempt = 0
+            while True:
+                try:
+                    rows = client.list_archive_page(
+                        archive_url=archive_url,
+                        post_datetime_from=post_datetime_from,
+                        post_datetime_to=post_datetime_to,
+                        page_size=page_size,
                         page=page,
-                        attempt=f"{listing_attempt}/{archive_listing_retries}",
-                        sleep_seconds=f"{cooldown_seconds:.1f}",
-                        reason="http_429",
                     )
-                    time.sleep(cooldown_seconds)
-                    continue
-                raise
+                    break
+                except requests.HTTPError as exc:
+                    status = exc.response.status_code if exc.response is not None else None
+                    if status == 429 and listing_attempt < archive_listing_retries:
+                        listing_attempt += 1
+                        retry_after = (
+                            parse_retry_after_seconds(exc.response.headers.get("Retry-After"))
+                            if exc.response is not None
+                            else 0.0
+                        )
+                        cooldown_seconds = max(
+                            retry_after,
+                            retry_sleep_seconds * (2 ** listing_attempt),
+                        )
+                        log_event(
+                            "ARCHIVE_LISTING_RETRY",
+                            dataset=dataset_id,
+                            page=page,
+                            attempt=f"{listing_attempt}/{archive_listing_retries}",
+                            sleep_seconds=f"{cooldown_seconds:.1f}",
+                            reason="http_429",
+                        )
+                        time.sleep(cooldown_seconds)
+                        continue
+                    raise
 
-        if not rows:
-            break
-        tagged_rows: List[Dict[str, Any]] = []
-        for row in rows:
-            tagged = dict(row)
-            tagged["__archive_page"] = page
-            tagged_rows.append(tagged)
-        docs.extend(tagged_rows)
-        if on_page_listed is not None:
-            on_page_listed(page, tagged_rows, len(docs))
-        if progress_every_pages > 0 and (page == 1 or page % progress_every_pages == 0):
-            log_event(
-                "ARCHIVE_LISTING_PROGRESS",
-                dataset=dataset_id,
-                page=page,
-                docs_collected=len(docs),
-            )
-        if len(rows) < page_size:
-            break
-        page += 1
+            if not rows:
+                break
+            tagged_rows: List[Dict[str, Any]] = []
+            for row in rows:
+                tagged = dict(row)
+                tagged["__archive_page"] = page
+                tagged_rows.append(tagged)
+            docs.extend(tagged_rows)
+            _list_pbar.update(1)
+            _list_pbar.set_postfix(docs=len(docs))
+            if on_page_listed is not None:
+                on_page_listed(page, tagged_rows, len(docs))
+            if progress_every_pages > 0 and (page == 1 or page % progress_every_pages == 0):
+                log_event(
+                    "ARCHIVE_LISTING_PROGRESS",
+                    dataset=dataset_id,
+                    page=page,
+                    docs_collected=len(docs),
+                )
+            if len(rows) < page_size:
+                break
+            page += 1
+    finally:
+        _list_pbar.close()
     return docs
 
 
@@ -1495,6 +1669,8 @@ def _csv_row_issue_timestamp(row: Dict[str, str], lower_to_name: Dict[str, str])
 
 
 def resolve_monthly_sort_strategy(sort_strategy: str, lower_to_name: Dict[str, str]) -> str:
+    if sort_strategy == "postdatetime":
+        return "postdatetime"
     if sort_strategy == "timestamp":
         return "timestamp"
     if sort_strategy == "forecast-aware":
@@ -1543,6 +1719,13 @@ def _csv_row_sort_key(
     lower_to_name: Dict[str, str],
     sort_strategy: str,
 ) -> Optional[Tuple[datetime, ...]]:
+    if sort_strategy == "postdatetime":
+        issue_time = _csv_row_issue_timestamp(row, lower_to_name)
+        if issue_time is not None:
+            return (issue_time,)
+        fallback = _csv_row_timestamp(row, lower_to_name)
+        return (fallback,) if fallback is not None else None
+
     if sort_strategy == "timestamp":
         timestamp = _csv_row_timestamp(row, lower_to_name)
         return (timestamp,) if timestamp is not None else None
@@ -1866,7 +2049,12 @@ def parse_args() -> argparse.Namespace:
         "--bulk-chunk-size",
         type=parse_bulk_chunk_size,
         default=256,
-        help="Bulk download chunk size (natural number 1..2048).",
+        help="Bulk download chunk size (natural number 1..2048). Smaller values reduce 429 throttling risk.",
+    )
+    parser.add_argument(
+        "--disable-bulk-download",
+        action="store_true",
+        help="Skip bulk archive downloads and fetch files one-by-one via per-doc fallback.",
     )
     parser.add_argument("--extract-zips", action="store_true", help="Extract each downloaded ZIP archive.")
     parser.add_argument(
@@ -1958,12 +2146,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--monthly-sort-strategy",
-        choices=("auto", "timestamp", "forecast-aware"),
+        choices=("auto", "timestamp", "forecast-aware", "postdatetime"),
         default="auto",
         help=(
             "Sort key strategy for monthly CSV sorting. "
             "'auto' uses forecast-aware key when both target-time and issue-time columns exist, "
-            "otherwise timestamp-only."
+            "otherwise timestamp-only. "
+            "'postdatetime' sorts by PostingTime/postDateTime fields when available."
         ),
     )
     parser.add_argument(
@@ -1980,7 +2169,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--request-interval-seconds",
         type=float,
-        default=0.35,
+        default=0.60,
         help="Minimum delay between API requests to reduce 429 throttling.",
     )
     parser.add_argument("--token-url", default=TOKEN_URL, help="Token endpoint URL.")
@@ -2206,7 +2395,7 @@ def main() -> None:
         marker_cache: Dict[Path, Set[str]] = {}
         consecutive_network_failures = 0
 
-        for dataset_id in selected_ids:
+        for dataset_id in tqdm(selected_ids, desc="Datasets", unit="dataset"):
             product = product_by_id.get(dataset_id)
             if product_by_id and product is None:
                 log_event(
@@ -2456,8 +2645,13 @@ def main() -> None:
 
             chunk_size = args.bulk_chunk_size
             bulk_written_doc_ids: Set[str] = set()
-            doc_chunks = [docs[i : i + chunk_size] for i in range(resume_doc_index, len(docs), chunk_size)]
+            doc_chunks: List[List[Dict[str, Any]]]
+            if args.disable_bulk_download:
+                doc_chunks = []
+            else:
+                doc_chunks = [docs[i : i + chunk_size] for i in range(resume_doc_index, len(docs), chunk_size)]
             total_chunks = len(doc_chunks)
+            bulk_disabled_after_error = False
 
             def should_log_bulk_progress(chunk_id: int) -> bool:
                 if total_chunks <= 1:
@@ -2468,9 +2662,11 @@ def main() -> None:
                     return False
                 return chunk_id % args.bulk_progress_every == 0
 
-            if doc_chunks:
+            if args.disable_bulk_download:
+                log_event("BULK_DISABLED", dataset=dataset_id, reason="flag_disable_bulk_download")
+            elif doc_chunks:
                 log_event("BULK_QUEUE", dataset=dataset_id, chunks=len(doc_chunks), chunk_size=chunk_size)
-            for chunk_id, doc_chunk in enumerate(doc_chunks, start=1):
+            for chunk_id, doc_chunk in tqdm(enumerate(doc_chunks, start=1), total=total_chunks, desc=f"Bulk {dataset_id}", unit="chunk", leave=False):
                 chunk_started_at = time.monotonic()
                 chunk_label = f"{chunk_id}/{len(doc_chunks)}"
                 chunk_doc_ids: List[str] = []
@@ -2483,6 +2679,16 @@ def main() -> None:
                     filename = choose_filename(doc)
                     filename = with_doc_id_suffix(filename, doc_id)
                     dataset_subdir = dataset_subdir_from_doc(doc)
+                    if args.consolidate_monthly:
+                        monthly_path = monthly_csv_path(outdir, dataset_id, dataset_subdir)
+                        marker_path = marker_path_for_monthly(monthly_path)
+                        known_doc_ids = marker_cache.get(marker_path)
+                        if known_doc_ids is None:
+                            known_doc_ids = load_marker_doc_ids(marker_path)
+                            marker_cache[marker_path] = known_doc_ids
+                        if doc_id in known_doc_ids:
+                            # Already consolidated; do not bulk-redownload a source file that would be skipped later.
+                            continue
                     destination = outdir / dataset_id / dataset_subdir / filename
                     wanted_size = expected_size(doc)
                     exists_and_matches = (
@@ -2530,12 +2736,13 @@ def main() -> None:
                 try:
                     doc_contents = client.download_docs(dataset_id, chunk_doc_ids)
                 except Exception as exc:  # noqa: BLE001
+                    error_text = format_exception_message(exc)
                     stats.failures += 1
                     dataset_summary["status"] = "running_with_failures"
                     record_failure(
                         dataset_id=dataset_id,
                         stage="bulk-download",
-                        error=str(exc),
+                        error=error_text,
                         page=_safe_int(doc_chunk[0].get("__archive_page"), 0),
                     )
                     log_event(
@@ -2543,7 +2750,7 @@ def main() -> None:
                         dataset=dataset_id,
                         chunk=chunk_label,
                         docs=len(chunk_doc_ids),
-                        error=str(exc),
+                        error=error_text,
                     )
                     chunk_elapsed_seconds = time.monotonic() - chunk_started_at
                     log_event(
@@ -2555,7 +2762,14 @@ def main() -> None:
                         status="error",
                         elapsed_seconds=f"{chunk_elapsed_seconds:.2f}",
                     )
-                    continue
+                    bulk_disabled_after_error = True
+                    log_event(
+                        "BULK_DISABLED",
+                        dataset=dataset_id,
+                        reason="error_fallback_to_per_doc",
+                        chunk=chunk_label,
+                    )
+                    break
 
                 missing_payload_ids = [doc_id for doc_id in chunk_doc_ids if doc_id not in doc_contents]
                 if missing_payload_ids:
@@ -2613,8 +2827,10 @@ def main() -> None:
                     status="ok",
                     elapsed_seconds=f"{chunk_elapsed_seconds:.2f}",
                 )
+            if bulk_disabled_after_error:
+                log_event("BULK_FALLBACK", dataset=dataset_id, mode="per_doc")
 
-            for doc_index, doc in enumerate(docs[resume_doc_index:], start=resume_doc_index):
+            for doc_index, doc in tqdm(enumerate(docs[resume_doc_index:], start=resume_doc_index), total=len(docs) - resume_doc_index, desc=f"Docs {dataset_id}", unit="doc", leave=False):
                 doc_id = extract_doc_id(doc)
                 if not doc_id:
                     stats.skipped_missing_doc_id += 1
@@ -2631,6 +2847,7 @@ def main() -> None:
                 filename = choose_filename(doc)
                 filename = with_doc_id_suffix(filename, doc_id)
                 dataset_subdir = dataset_subdir_from_doc(doc)
+                destination = outdir / dataset_id / dataset_subdir / filename
                 monthly_path = monthly_csv_path(outdir, dataset_id, dataset_subdir)
                 marker_path = marker_path_for_monthly(monthly_path)
                 if args.consolidate_monthly:
@@ -2639,11 +2856,21 @@ def main() -> None:
                         known_doc_ids = load_marker_doc_ids(marker_path)
                         marker_cache[marker_path] = known_doc_ids
                     if doc_id in known_doc_ids:
+                        if args.delete_source_after_consolidation and not args.dry_run and destination.exists():
+                            try:
+                                destination.unlink()
+                            except Exception as exc:  # noqa: BLE001
+                                log_event(
+                                    "SOURCE_DELETE_WARN",
+                                    dataset=dataset_id,
+                                    doc_id=doc_id,
+                                    file=destination,
+                                    error=str(exc),
+                                )
                         stats.skipped_existing += 1
                         dataset_summary["docs_processed"] += 1
                         save_doc_checkpoint(doc_index, doc_id, doc)
                         continue
-                destination = outdir / dataset_id / dataset_subdir / filename
                 wanted_size = expected_size(doc)
                 exists_and_matches = (
                     destination.exists()
@@ -2705,7 +2932,8 @@ def main() -> None:
                         bulk_written_doc_ids.remove(doc_id)
                         downloaded_now = True
                     if args.consolidate_monthly:
-                        appended_rows = append_doc_to_monthly_csv(source_path, monthly_path)
+                        post_dt = str(doc.get("postDatetime", "")).strip()
+                        appended_rows = append_doc_to_monthly_csv(source_path, monthly_path, post_datetime=post_dt)
                         if appended_rows > 0:
                             stats.consolidated_updates += 1
                         touched_monthly_paths.add(monthly_path)
@@ -2888,6 +3116,7 @@ def main() -> None:
                             "title": DATASETS.get(dataset_id, {}).get("title"),
                             "report_name": product_title,
                             "doc_id": doc_id,
+                            "postDateTime": doc.get("postDatetime"),
                             "post_datetime": doc.get("postDatetime"),
                             "filename": filename,
                             "destination": str(destination),

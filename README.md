@@ -38,6 +38,14 @@ Use these runbooks as the default workflow.
 - `scripts/download_ercot_public_reports.py`
   - Main downloader for ERCOT public reports API.
   - Supports checkpoint resume, structured event logging, and configurable progress log frequency.
+  - Shows tqdm progress bars (Datasets · Archive listing pages · Bulk chunks · Per-doc) when `tqdm` is installed.
+- `scripts/backfill_post_datetime.py`
+  - Backfills `postDateTime` into consolidated monthly CSV files without re-downloading.
+  - Supports add-missing and rebuild modes, verify, and redundant-source cleanup/archive.
+  - Shows tqdm progress bars (Datasets · Monthly files) when `tqdm` is installed.
+- `scripts/sort_csv.py`
+  - Re-sorts existing local monthly CSV files without downloading from API.
+  - Shows tqdm progress bars (Datasets · Monthly files) when `tqdm` is installed.
 - `scripts/list_ercot_analysis_datasets.py`
   - Prints recommended dataset IDs by profile with reasons.
 - `scripts/ercot_dataset_catalog.py`

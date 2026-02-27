@@ -39,8 +39,8 @@ Create/activate Python environment and install required package:
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
-python3 -m pip install requests pyyaml
-python3 -c "import requests, yaml; print('requests ok:', requests.__version__); print('pyyaml ok:', yaml.__version__)"
+python3 -m pip install requests pyyaml tqdm
+python3 -c "import requests, yaml, tqdm; print('requests ok:', requests.__version__); print('pyyaml ok:', yaml.__version__); print('tqdm ok:', tqdm.__version__)"
 ```
 
 Create ERCOT API access:
@@ -107,6 +107,12 @@ Notes:
 - The sample file is `config/download.sample.yaml`.
 - `config/download.yaml` is local-only and git-ignored, so each person should create their own copy.
 - To avoid accidental overwrite, use `cp -i config/download.sample.yaml config/download.yaml`.
+
+Source file retention policy:
+- `delete_source_after_consolidation` in `config/download.yaml` is set to `false`.
+- This keeps per-doc source CSVs in `data/raw/ercot/<DATASET>/<YYYY>/<MM>/` after monthly consolidation.
+- Source files are required by `backfill_post_datetime.py` to fill missing `postDateTime` columns.
+- Do not set this to `true` unless you have fully completed `postDateTime` backfill for all active datasets.
 
 Downloader code defaults (when date flags are omitted):
 - `from_date: 2016-01-01`
@@ -250,6 +256,22 @@ Set `--bulk-progress-every` to:
 - `10` (default)
 - `20` or `50` (quieter progress logging)
 
+### tqdm progress bars
+
+All scripts (`download_ercot_public_reports.py`, `backfill_post_datetime.py`, `sort_csv.py`) show live terminal progress bars via `tqdm` when it is installed.
+
+| Script | Bars shown |
+|--------|-----------|
+| `download_ercot_public_reports.py` | Datasets outer bar · Archive listing pages + live doc count · Bulk chunks · Per-doc (resume-aware) |
+| `backfill_post_datetime.py` | Datasets outer bar · Monthly files inner bar (verify/archive/cleanup modes included) |
+| `sort_csv.py` | Datasets outer bar · Monthly files inner bar |
+
+Progress bars write to stderr and do not appear in `run.log`.
+Inner bars use `leave=False` so they clear when a dataset finishes.
+If `tqdm` is not installed, all scripts fall back silently to plain text log output with no error.
+
+Install: `python3 -m pip install tqdm`
+
 ### Structured run log events
 
 `run.log` now uses one-line structured events:
@@ -356,6 +378,133 @@ done
 - The dataset may not be in current public-reports catalog for your account.
 - Check available IDs with:
 `make download DOWNLOAD_FLAGS="--list-api-products"`
+
+### Add Missing `postDateTime` In Existing Monthly CSVs
+
+Use this when you want to keep current monthly CSV files, fill missing `postDateTime`, and keep rows in ascending `postDateTime` order without replacing dataset folders.
+
+Standard flow:
+
+```bash
+# dry run (optional)
+python3 scripts/backfill_post_datetime.py \
+  --dataset <DATASET_ID> \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order none \
+  --fetch-missing-post-datetime \
+  --download-missing-sources \
+  --bulk-chunk-size 256 \
+  --dry-run
+
+# 1) backfill postDateTime values
+python3 scripts/backfill_post_datetime.py \
+  --dataset <DATASET_ID> \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order none \
+  --fetch-missing-post-datetime \
+  --download-missing-sources \
+  --bulk-chunk-size 256
+
+# 2) verify + sort ascending (only rewrites if month is not already sorted)
+python3 scripts/backfill_post_datetime.py \
+  --dataset <DATASET_ID> \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order ascending \
+  --verify
+
+# 3) delete redundant per-doc source files after coverage is complete
+python3 scripts/backfill_post_datetime.py \
+  --dataset <DATASET_ID> \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order none \
+  --delete-redundant-sources
+
+# 3-alt) archive redundant per-doc source files (safer than delete)
+python3 scripts/backfill_post_datetime.py \
+  --dataset <DATASET_ID> \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode add-missing \
+  --order none \
+  --archive-redundant-sources-dir data/archive/ercot
+```
+
+Known-good single-command rebuild + verify:
+
+```bash
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP4-732-CD \
+  --data-root data/raw/ercot \
+  --state-dir state \
+  --manifest-path data/raw/ercot/download_manifest.json \
+  --mode rebuild \
+  --order ascending \
+  --verify
+```
+
+What this does:
+- Updates files in place at `data/raw/ercot/<DATASET>/<YYYY>/<MM>/<DATASET>_<YYYYMM>.csv`.
+- Verifies row coverage (`MONTH_VERIFY`) after each month.
+- Sorts monthly rows in ascending `postDateTime` order when needed.
+- Deletes per-doc source files only when `postDateTime` coverage is complete (`MONTH_CLEANUP ... status=deleted`).
+- Can move (archive) per-doc source files into a separate folder instead of deleting (`MONTH_CLEANUP ... status=archived`).
+
+Backfill performance notes:
+- `--download-missing-sources` uses bulk POST download automatically (up to 256 docs per request).
+  - Example: NP3-565-CD with 744 missing source docs → 3 bulk requests instead of 744 individual GETs.
+- Row counting uses fast line splitting (9.4× speedup over DictReader iteration).
+- Source text is cached per-doc: each source file is read once regardless of how many passes are needed.
+- `--bulk-chunk-size` controls how many source doc IDs are fetched in one bulk request (default: 256).
+
+Large dataset recommendation (NP6-905-CD style):
+- NP6-905-CD has ~2.9M rows per month (108MB CSVs) with all `postDateTime` values empty.
+- Use `--mode rebuild` instead of `--mode add-missing` to avoid loading the full monthly CSV into memory.
+- Rebuild reads source files directly and writes a fresh monthly CSV (~29s/month vs ~47s for add-missing).
+
+```bash
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP6-905-CD \
+  --from-date 2017-07-01 \
+  --to-date 2026-02-26 \
+  --mode rebuild \
+  --order none \
+  --bulk-chunk-size 256
+```
+
+Fingerprint collision behavior:
+- When `--overwrite` is NOT set: `FINGERPRINT_COLLISION_WARN` is logged; collision is non-critical.
+- When `--overwrite` IS set: collision escalates to `FINGERPRINT_COLLISION_ERROR`; ambiguous rows are left empty (not guessed) to avoid assigning wrong `postDateTime` values.
+
+If `postDateTime` stays empty after backfill:
+- Symptom: many `*__<docId>` files appear but monthly CSV still has missing `postDateTime`.
+- Cause: downloaded source may be metadata JSON or month/source row counts do not align perfectly.
+- Current script behavior already handles this:
+  - ignores JSON metadata files as invalid sources,
+  - uses archive doc links from `state/*.archive_docs.jsonl` (with URL fallback),
+  - uses row-fingerprint mapping for row-count mismatch cases.
+
+Targeted recovery example:
+
+```bash
+python3 scripts/backfill_post_datetime.py \
+  --dataset NP6-346-CD \
+  --from-date 2026-01-01 \
+  --to-date 2026-02-25 \
+  --mode add-missing \
+  --order ascending \
+  --download-missing-sources \
+  --bulk-chunk-size 256 \
+  --verify \
+  --delete-redundant-sources
+```
 
 ## 7. Diagnose DNS with Verbose Logging
 

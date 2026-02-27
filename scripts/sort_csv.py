@@ -8,6 +8,12 @@ from datetime import date
 from pathlib import Path
 from typing import Iterable, List
 
+try:
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover - optional progress bar
+    def tqdm(iterable, **_):  # type: ignore[misc]
+        return iterable
+
 from download_ercot_public_reports import monthly_csv_in_window, sort_monthly_csv
 
 
@@ -60,7 +66,7 @@ def main() -> None:
     failures = 0
     candidates = 0
 
-    for dataset_id in dataset_ids:
+    for dataset_id in tqdm(dataset_ids, desc="Datasets", unit="dataset"):
         dataset_root = data_root / dataset_id
         if not dataset_root.is_dir():
             print(f"DATASET_SKIP dataset={dataset_id} reason=missing_dir")
@@ -82,7 +88,7 @@ def main() -> None:
             f"DATASET_PLAN dataset={dataset_id} files={len(monthly_files)} "
             f"order={args.order} strategy={args.strategy}"
         )
-        for path in monthly_files:
+        for path in tqdm(monthly_files, desc=dataset_id, unit="file", leave=False):
             candidates += 1
             try:
                 status = sort_monthly_csv(path, args.order, args.strategy)

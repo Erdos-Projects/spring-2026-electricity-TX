@@ -6,7 +6,7 @@ This is the shortest end-to-end flow for this repo.
 Shared range used here:
 - `2017-07-01` to `2024-12-31`
 
-Supported datasets in this workflow:
+Supported datasets in this workflow (13 total):
 - `NP6-346-CD`
 - `NP3-565-CD`
 - `NP4-732-CD`
@@ -19,6 +19,7 @@ Supported datasets in this workflow:
 - `NP3-911-ER`
 - `NP4-190-CD` (data starts 2014-05-01)
 - `NP6-345-CD` (data starts 2014-05-01)
+- `NP6-331-CD` (data starts 2025-12-04)
 
 ## 1) Enter project root
 Why this step: make sure config and script paths resolve.

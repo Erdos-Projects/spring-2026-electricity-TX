@@ -12,6 +12,7 @@ Scope:
 - This file is download-operations only.
 - For storage/time planning and dataset-selection estimates, use `DATA_ESTIMATION.md`.
 - Recommended shared download range in this repo: `2017-07-01` to `2024-12-31`.
+- Actual data on disk extends to `2026-02` from backfill and extended runs.
 - Pass explicit `--from-date` and `--to-date` in shared runs to avoid accidental default drift.
 
 ## Table of Contents
@@ -146,6 +147,8 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP6-788-CD \
 --dataset NP4-188-CD \
 --dataset NP3-911-ER \
+--dataset NP4-190-CD \
+--dataset NP6-345-CD \
 --from-date 2017-07-01 \
 --to-date 2024-12-31 \
 --bulk-chunk-size 256 \
@@ -168,8 +171,9 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --file-timing-frequency daily"
 ```
 
-Range note:
+Range notes:
 - `NP6-331-CD` currently starts at `2025-12-04`; include it only when `--to-date` reaches that period.
+- `NP4-190-CD` and `NP6-345-CD` have data from `2014-05-01`. The shared-range command covers `2017-07-01` onward; to download their full history, run a separate command with `--from-date 2014-05-01 --to-date 2017-06-30`.
 
 `--datasets-only` selection behavior:
 - If CLI `--dataset` flags are present, only those CLI dataset IDs are used.

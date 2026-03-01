@@ -5,11 +5,12 @@ Use this document for current planning based on actual local data and recent run
 Use `DATA_DOWNLOAD.md` for download commands and troubleshooting.
 
 Current snapshot:
-- As-of horizon: `2025-12-31`
+- As-of horizon: `2026-02-27`
 - Last refreshed: `2026-02-27`
 - Primary inputs: `data/raw/ercot/*`, `logs/downloads/*/run.log`, `logs/downloads/*/summary.json`
-- Shared-run command baseline remains `2017-07-01` to `2024-12-31` (see `DATA_DOWNLOAD.md`)
+- Shared-run command baseline: `2017-07-01` to `2024-12-31` (see `DATA_DOWNLOAD.md`); actual data on disk extends to `2026-02`
 - `NP3-912-ER` is confirmed non-existent (ERCOT API returns 404; removed from config)
+- Total local storage: ~89 GB (raw 50G, archive 30G, compressed 8.4G, sample 725M)
 
 ## Table of Contents
 
@@ -65,6 +66,8 @@ Current snapshot:
 | `NP4-188-CD` | DAM Clearing Prices for Capacity | Ancillary — DA | Per DAM run (daily) | Day-ahead clearing prices for ancillary service capacity. Pairs with NP6-331-CD for DA vs RT ancillary analysis. |
 | `NP3-233-CD` | Hourly Resource Outage Capacity | Reliability | Hourly | Hourly forced and planned outage capacity (MW) by resource type. Critical input for explaining scarcity events and price spikes. |
 | `NP3-911-ER` | 2-Day DAM Ancillary Services Reports | Ancillary — DA detail | Daily | Confidentiality-expired (2-day lag) detailed DAM ancillary service bids and offers by resource. |
+| `NP4-190-CD` | DAM Settlement Point Prices | Prices — DA | Per DAM run (daily) | Day-ahead settlement point prices for every resource node, hub, and load zone. DA complement to RT `NP6-905-CD`. Available from 2014-05-01. |
+| `NP6-345-CD` | Actual System Load by Weather Zone | Load — actual | Hourly | Same actual load data as `NP6-346-CD` but broken out by weather zone instead of forecast zone. Available from 2014-05-01. |
 
 ### Candidate datasets (not yet downloaded)
 
@@ -72,9 +75,7 @@ Identified from ERCOT public-reports API catalog on 2026-02-27. All are Active w
 
 | Dataset ID | Official Name | Category | Freq | Records | Description | Relation to existing |
 |---|---|---|---|---|---|---|
-| `NP4-190-CD` | DAM Settlement Point Prices | Prices — DA | Per DAM run (daily) | ~4,321 | Day-ahead settlement point prices for every resource node, hub, and load zone. Daily posting. | DA complement to our RT `NP6-905-CD` |
 | `NP4-183-CD` | DAM Hourly LMPs | Prices — DA | Per DAM run (daily) | ~4,321 | Day-ahead hourly LMPs for all nodes, zones, and hubs. | DA complement to our RT `NP6-788-CD` |
-| `NP6-345-CD` | Actual System Load by Weather Zone | Load — actual | Hourly | ~4,319 | Same actual load data as `NP6-346-CD` but broken out by weather zone instead of forecast zone. | Alternative geographic cut of `NP6-346-CD` |
 | `NP3-566-CD` | Seven-Day Load Forecast by Model and Study Area | Load — forecast | Hourly | ~59,070 | Same 7-day load forecast as `NP3-565-CD` but broken out by study area instead of weather zone. | Alternative geographic cut of `NP3-565-CD` |
 | `NP6-322-CD` | SCED System Lambda | Prices — RT | Per SCED (~5 min) | ~1,257,000 | Real-time system lambda from every SCED run. RT complement to our DAM `NP4-523-CD`. Very large — ~5-min resolution. | RT complement to `NP4-523-CD` |
 | `NP6-332-CD` | Real-Time Clearing Prices for Capacity by SCED Interval | Ancillary — RT | Per SCED (~5 min) | ~24,538 | RT ancillary clearing prices at per-SCED granularity. Higher-resolution version of `NP6-331-CD`. | More granular version of `NP6-331-CD` |
@@ -106,11 +107,14 @@ Observed dataset starts in the current local/API-log snapshot:
 | `NP4-188-CD` | DAM ancillary prices | `2017-07-02` | `2017-07-02` |
 | `NP3-233-CD` | Outage capacity | `2017-07-01` | `2017-07-01` |
 | `NP3-911-ER` | 2-Day DAM AS Reports | `2017-06-29` | `2017-07-01` |
+| `NP4-190-CD` | DAM settlement prices | `2014-05-01` | `2014-05-01` |
+| `NP6-345-CD` | Load (actual, weather zone) | `2014-05-01` | `2014-05-01` |
 
-## 2. Coverage Snapshot (2025)
+## 2. Coverage Snapshot (2025 Calendar Year)
 
 Audit window:
 - `2025-01-01` to `2025-12-31` (`365` days)
+- Audit run: `2026-02-23`. Covers the 11 original datasets (NP4-190-CD and NP6-345-CD excluded from this audit).
 
 Audit method:
 - Parsed local `2025` monthly CSV files under `data/raw/ercot/<DATASET>/2025/<MM>/...`
@@ -173,32 +177,35 @@ Completed-run sanity check:
 ## 4. Dataset Summary (Actual Size Snapshot)
 
 Range:
-- `2017-07-01` to `2025-12-31`
+- `2017-07-01` to `2026-02-27` (on-disk data; shared baseline ends `2024-12-31`)
 
 Method notes:
 - Actual-only snapshot (no modeled time columns)
-- `Actual Start Date in Window` is `max(2017-07-01, observed_start)`
-- `Dates Available` is inclusive from actual start date to `2025-12-31`
+- `Actual Start Date in Window` is `max(2017-07-01, observed_start)` for most datasets; `NP4-190-CD` and `NP6-345-CD` start at `2014-05-01`
+- Sizes are from `du -sh` on `data/raw/ercot/<DATASET>/`
 
-| Priority | Dataset ID | Data Type | Observed Start | Actual Start Date in Window | Dates Available (to 2025-12-31) | Monthly Files (local / expected) | Actual Total Downloaded Size (2017-07-01 to 2025-12-31) | Actual Avg Monthly Downloaded Size | Actual Avg Yearly Downloaded Size | Notes |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `NP6-346-CD` | Load (actual) | 2017-06-30 | 2017-07-01 | 3,106 | 102/102 | 4.52 MB | 45.43 KB | 514.82 KB | - |
-| 1 | `NP3-233-CD` | Outage capacity | 2017-07-01 | 2017-07-01 | 3,106 | 102/102 | 656.63 MB | 6.44 MB | 72.96 MB | - |
-| 1 | `NP4-732-CD` | Renewable (wind) | 2017-06-29 | 2017-07-01 | 3,106 | 102/102 | 1.61 GB | 16.19 MB | 183.45 MB | - |
-| 1 | `NP4-745-CD` | Renewable (solar) | 2022-06-28 | 2022-06-28 | 1,283 | 43/43 | 774.61 MB | 18.01 MB | 193.65 MB | starts after `2017-07-01` |
-| 1 | `NP6-905-CD` | Price (settlement) | 2017-06-30 | 2017-07-01 | 3,106 | 102/102 | 8.68 GB | 87.13 MB | 987.42 MB | - |
-| 2 | `NP4-523-CD` | Price (DA) | 2017-07-02 | 2017-07-02 | 3,105 | 102/102 | 1.96 MB | 19.71 KB | 223.38 KB | - |
-| 2 | `NP3-565-CD` | Load forecast | 2017-07-01 | 2017-07-01 | 3,106 | 102/102 | 10.71 GB | 107.51 MB | 1.19 GB | - |
-| 2 | `NP6-788-CD` | Price (LMP detail) | 2024-02-21 | 2024-02-21 | 680 | 23/23 | 8.52 GB | 379.16 MB | 4.26 GB | current access starts at `2024-02` |
-| 3 | `NP4-188-CD` | Ancillary prices (DA) | 2017-07-02 | 2017-07-02 | 3,105 | 102/102 | 9.19 MB | 92.26 KB | 1.02 MB | - |
-| 3 | `NP3-911-ER` | Renewable detail | 2017-06-29 | 2017-07-01 | 3,106 | 102/102 | 31.79 MB | 319.15 KB | 3.53 MB | - |
-| 3 | `NP6-331-CD` | Ancillary prices (RT) | 2025-12-04 | 2025-12-04 | 28 | 1/1 | 360.21 KB | 360.21 KB | 360.21 KB | starts after `2017-07-01` |
+| Priority | Dataset ID | Data Type | Observed Start | Monthly Files | Raw Size on Disk | Notes |
+|---|---|---|---|---:|---|---|
+| 1 | `NP6-346-CD` | Load (actual, forecast zone) | 2017-06-30 | 104 | 7.3M | postDateTime 100% |
+| 1 | `NP3-233-CD` | Outage capacity | 2017-07-01 | 104 | 989M | postDateTime 100% |
+| 1 | `NP4-732-CD` | Renewable (wind) | 2017-06-29 | 104 | 2.0G | |
+| 1 | `NP4-745-CD` | Renewable (solar) | 2022-06-28 | 45 | 959M | starts 2022-06 |
+| 1 | `NP6-905-CD` | Price (RT settlement) | 2017-06-30 | 104 | 14G | postDateTime 100% |
+| 2 | `NP4-523-CD` | Price (DA lambda) | 2017-07-02 | 104 | 4.7M | |
+| 2 | `NP3-565-CD` | Load forecast | 2017-07-01 | 104 | 13G | postDateTime 100% |
+| 2 | `NP6-788-CD` | Price (RT LMP, per-SCED) | 2024-02-21 | 25 | 14G | download in progress (~10%) |
+| 2 | `NP4-190-CD` | Price (DA settlement) | 2014-05-01 | 142 | 5.0G | from 2014-05 |
+| 2 | `NP6-345-CD` | Load (actual, weather zone) | 2014-05-01 | 142 | 13M | from 2014-05 |
+| 3 | `NP4-188-CD` | Ancillary prices (DA) | 2017-07-02 | 104 | 18M | |
+| 3 | `NP3-911-ER` | 2-Day DAM AS reports | 2017-06-29 | 104 | 49M | |
+| 3 | `NP6-331-CD` | Ancillary prices (RT) | 2025-12-04 | 3 | 2.0M | starts 2025-12 |
 
 Totals:
-- Actual total downloaded size (`2017-07-01` to `2025-12-31`): `30.96 GB`
-- Priority `1`: `11.69 GB`
-- Priority `2`: `19.23 GB`
-- Priority `3`: `41.33 MB`
+- Raw data on disk: ~50 GB (`data/raw/ercot/`)
+- Archived source files: ~30 GB (`data/archive/ercot/`)
+- Compressed snapshots: ~8.4 GB (`data/compressed/`)
+- Sample data: ~725 MB (`data/sample/`)
+- **Total `data/` directory: ~89 GB**
 
 ## 5. How to Refresh
 

@@ -12,6 +12,7 @@ Scope:
 - This file is download-operations only.
 - For storage/time planning and dataset-selection estimates, use `DATA_ESTIMATION.md`.
 - Recommended shared download range in this repo: `2017-07-01` to `2024-12-31`.
+- Actual data on disk extends to `2026-02` from backfill and extended runs.
 - Pass explicit `--from-date` and `--to-date` in shared runs to avoid accidental default drift.
 
 ## Table of Contents
@@ -146,6 +147,8 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP6-788-CD \
 --dataset NP4-188-CD \
 --dataset NP3-911-ER \
+--dataset NP4-190-CD \
+--dataset NP6-345-CD \
 --from-date 2017-07-01 \
 --to-date 2024-12-31 \
 --bulk-chunk-size 256 \
@@ -168,8 +171,9 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --file-timing-frequency daily"
 ```
 
-Range note:
+Range notes:
 - `NP6-331-CD` currently starts at `2025-12-04`; include it only when `--to-date` reaches that period.
+- `NP4-190-CD` and `NP6-345-CD` have data from `2014-05-01`. The shared-range command covers `2017-07-01` onward; to download their full history, run a separate command with `--from-date 2014-05-01 --to-date 2017-06-30`.
 
 `--datasets-only` selection behavior:
 - If CLI `--dataset` flags are present, only those CLI dataset IDs are used.
@@ -465,8 +469,8 @@ Backfill performance notes:
 - `--bulk-chunk-size` controls how many source doc IDs are fetched in one bulk request (default: 256).
 
 Large dataset recommendation (NP6-905-CD style):
-- NP6-905-CD has ~2.9M rows per month (108MB CSVs) with all `postDateTime` values empty.
-- Use `--mode rebuild` instead of `--mode add-missing` to avoid loading the full monthly CSV into memory.
+- NP6-905-CD has ~2.9M rows per month (108MB CSVs). Backfill completed 2026-02-27 (240.9M rows, 104/104 months, 0 missing).
+- Use `--mode rebuild` instead of `--mode add-missing` to avoid loading the full monthly CSV into memory if re-backfilling.
 - Rebuild reads source files directly and writes a fresh monthly CSV (~29s/month vs ~47s for add-missing).
 
 ```bash
@@ -505,6 +509,44 @@ python3 scripts/backfill_post_datetime.py \
   --verify \
   --delete-redundant-sources
 ```
+
+### postDateTime Backfill Status
+
+Last updated: `2026-02-27`
+
+| Dataset ID | Monthly CSVs | Total Rows | postDateTime Filled | Missing Rows | Sorted | Sources Archived |
+|---|---:|---:|---:|---:|---|---|
+| `NP6-346-CD` | 104/104 | — | 100% | 0 | ascending | `data/archive/ercot/NP6-346-CD/` |
+| `NP3-233-CD` | 104/104 | 13,719,192 | 100% | 0 | ascending | `data/archive/ercot/NP3-233-CD/` |
+| `NP6-905-CD` | 104/104 | 240,931,800 | 100% | 0 | ascending | `data/archive/ercot/NP6-905-CD/` |
+| `NP3-565-CD` | 104/104 | 105,527,360 | 100% | 0 | ascending | `data/archive/ercot/NP3-565-CD/` |
+
+Notes:
+- Backfill uses `--fetch-missing-post-datetime` to get docId→postDateTime mappings from the ERCOT archive API.
+- Source files are matched to monthly CSV rows via fingerprint-based row matching.
+- Minor fingerprint collisions occur in some months (< 0.1% of rows) but do not affect fill rate.
+- Archived sources are moved to `data/archive/ercot/<DATASET>/`, keeping only the latest active month's sources in `data/raw/`.
+- `NP6-788-CD` does not have a `postDateTime` column (first column is `SCEDTimestamp`); backfill does not apply.
+
+### Known Data Quality Issues
+
+These are source-level anomalies in ERCOT data that cannot be resolved by re-downloading or re-backfilling.
+
+#### NP4-190-CD — Misaligned rows (3 months)
+
+Three monthly files contain one row each where the CSV columns are shifted, producing an empty `postDateTime` and garbled field values. These rows originate from malformed source files published by ERCOT.
+
+Affected rows (1-indexed, including header):
+
+| Month | Row | Raw `DeliveryDate` | Raw `HourEnding` | Raw `SettlementPoint` |
+|-------|-----|--------------------|------------------|-----------------------|
+| 2024-05 | 675,581 | `15:00` | `INGLCO_PUN2` | `31.25` |
+| 2025-09 | 753,343 | `17:00` | `THW_CC1` | `34.42` |
+| 2025-10 | 783,434 | `LAUR_BESS_RN` | `22.15` | _(empty)_ |
+
+Expected columns: `postDateTime, DeliveryDate, HourEnding, SettlementPoint, SettlementPointPrice, DSTFlag`
+
+Status: **resolved** — the 3 malformed rows were deleted from their respective monthly CSVs (2024-05, 2025-09, 2025-10). Re-downloading or re-backfilling cannot recover these rows; the underlying source documents are malformed.
 
 ## 7. Diagnose DNS with Verbose Logging
 

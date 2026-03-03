@@ -35,6 +35,9 @@
 !/data/sample/ercot/**/2025/
 !/data/sample/ercot/**/2025/12/
 !/data/sample/ercot/**/2025/12/*.csv
+!/data/sample/weather
+/data/sample/weather/*
+!/data/sample/weather/**2025-12.csv
 
 # ── tooling & environment ─────────────────────────────────────────────────────
 *.log

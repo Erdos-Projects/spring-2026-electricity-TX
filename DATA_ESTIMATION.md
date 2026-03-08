@@ -58,11 +58,11 @@ Current snapshot:
 | `NP6-346-CD` | Actual System Load by Forecast Zone | Load — actual | Hourly | Actual system load (MW) by ERCOT's 8 forecast zones. Primary demand baseline for the grid. |
 | `NP3-565-CD` | Seven-Day Load Forecast by Model and Weather Zone | Load — forecast | Hourly | 7-day ahead load forecast broken out by weather zone and model type. Primary public load forecast series. |
 | `NP4-732-CD` | Wind Power Production — Hourly Averaged Actual and Forecasted Values | Renewables — wind | Hourly | Hourly wind actual output and day-ahead forecast by ERCOT zone. Core for wind variability and curtailment analysis. |
-| `NP4-745-CD` | Solar Power Production — Hourly Averaged Actual and Forecasted Values | Renewables — solar | Hourly | Hourly solar actual output and day-ahead forecast by ERCOT zone. Starts 2022-06-28. |
+| `NP4-745-CD` | Solar Power Production — Hourly Averaged Actual and Forecasted Values | Renewables — solar | Hourly | Hourly solar actual output and day-ahead forecast by ERCOT zone. Starts 2022-06-28. **Excluded from analysis** — only ~3.5 years of data; no coverage for 2017–2022 window. |
 | `NP6-905-CD` | Settlement Point Prices at Resource Nodes, Hubs and Load Zones | Prices — RT | 15-min | Real-time settlement point prices (SPP) for every resource node, load zone, and hub at 15-min resolution. Primary RT price series. ~2.9M rows/month. |
 | `NP6-788-CD` | LMPs by Resource Nodes, Load Zones and Trading Hubs | Prices — RT | Per SCED (~5 min) | Real-time locational marginal prices from each SCED run for all nodes, zones, and hubs. More granular than NP6-905-CD. Starts 2024-02-21. |
 | `NP4-523-CD` | DAM System Lambda | Prices — DA | Per DAM run (daily) | Day-ahead market system lambda (marginal price) per delivery hour. Used for DA vs RT spread analysis. |
-| `NP6-331-CD` | Real-Time Clearing Prices for Capacity by 15-Minute Settlement Interval | Ancillary — RT | 15-min | Real-time clearing prices for ancillary service capacity (ECRS, RegUp, RegDn, RRS, NSPIN) at 15-min intervals. Starts 2025-12-04. |
+| `NP6-331-CD` | Real-Time Clearing Prices for Capacity by 15-Minute Settlement Interval | Ancillary — RT | 15-min | Real-time clearing prices for ancillary service capacity (ECRS, RegUp, RegDn, RRS, NSPIN) at 15-min intervals. Starts 2025-12-04. **Excluded from analysis** — only 3 months of data. |
 | `NP4-188-CD` | DAM Clearing Prices for Capacity | Ancillary — DA | Per DAM run (daily) | Day-ahead clearing prices for ancillary service capacity. Pairs with NP6-331-CD for DA vs RT ancillary analysis. |
 | `NP3-233-CD` | Hourly Resource Outage Capacity | Reliability | Hourly | Hourly forced and planned outage capacity (MW) by resource type. Critical input for explaining scarcity events and price spikes. |
 | `NP3-911-ER` | 2-Day DAM Ancillary Services Reports | Ancillary — DA detail | Daily | Confidentiality-expired (2-day lag) detailed DAM ancillary service bids and offers by resource. |
@@ -99,16 +99,21 @@ Observed dataset starts in the current local/API-log snapshot:
 | `NP6-346-CD` | Load (actual) | `2017-06-30` | `2017-07-01` |
 | `NP3-565-CD` | Load forecast | `2017-07-01` | `2017-07-01` |
 | `NP4-732-CD` | Wind | `2017-06-29` | `2017-07-01` |
-| `NP4-745-CD` | Solar | `2022-06-28` | `2022-06-28` |
 | `NP6-905-CD` | Settlement prices | `2017-06-30` | `2017-07-01` |
 | `NP6-788-CD` | LMP detail | `2024-02-21` | `2024-02-21` |
 | `NP4-523-CD` | DAM system lambda | `2017-07-02` | `2017-07-02` |
-| `NP6-331-CD` | RT ancillary prices | `2025-12-04` | `2025-12-04` |
 | `NP4-188-CD` | DAM ancillary prices | `2017-07-02` | `2017-07-02` |
 | `NP3-233-CD` | Outage capacity | `2017-07-01` | `2017-07-01` |
-| `NP3-911-ER` | 2-Day DAM AS Reports | `2017-06-29` | `2017-07-01` |
 | `NP4-190-CD` | DAM settlement prices | `2014-05-01` | `2014-05-01` |
 | `NP6-345-CD` | Load (actual, weather zone) | `2014-05-01` | `2014-05-01` |
+
+Excluded from analysis (downloaded but not used):
+
+| Dataset ID | Reason |
+|---|---|
+| `NP4-745-CD` | Starts 2022-06-28 — no coverage for 2017–2022; breaks full-window analysis |
+| `NP6-331-CD` | Starts 2025-12-04 — only 3 months of data |
+| `NP3-911-ER` | Incoherent schema (changed 4× across 2017–2025); see DATA_DOWNLOAD.md §6 |
 
 ## 2. Coverage Snapshot (2025 Calendar Year)
 
@@ -189,7 +194,7 @@ Method notes:
 | 1 | `NP6-346-CD` | Load (actual, forecast zone) | 2017-06-30 | 104 | 7.3M | postDateTime 100% |
 | 1 | `NP3-233-CD` | Outage capacity | 2017-07-01 | 104 | 989M | postDateTime 100% |
 | 1 | `NP4-732-CD` | Renewable (wind) | 2017-06-29 | 104 | 2.0G | |
-| 1 | `NP4-745-CD` | Renewable (solar) | 2022-06-28 | 45 | 959M | starts 2022-06 |
+| 1 | `NP4-745-CD` | Renewable (solar) | 2022-06-28 | 45 | 959M | starts 2022-06 — **excluded from analysis** |
 | 1 | `NP6-905-CD` | Price (RT settlement) | 2017-06-30 | 104 | 14G | postDateTime 100% |
 | 2 | `NP4-523-CD` | Price (DA lambda) | 2017-07-02 | 104 | 4.7M | |
 | 2 | `NP3-565-CD` | Load forecast | 2017-07-01 | 104 | 13G | postDateTime 100% |
@@ -198,7 +203,7 @@ Method notes:
 | 2 | `NP6-345-CD` | Load (actual, weather zone) | 2014-05-01 | 142 | 13M | from 2014-05 |
 | 3 | `NP4-188-CD` | Ancillary prices (DA) | 2017-07-02 | 104 | 18M | |
 | 3 | `NP3-911-ER` | 2-Day DAM AS reports | 2017-06-29 | 104 | 49M | |
-| 3 | `NP6-331-CD` | Ancillary prices (RT) | 2025-12-04 | 3 | 2.0M | starts 2025-12 |
+| 3 | `NP6-331-CD` | Ancillary prices (RT) | 2025-12-04 | 3 | 2.0M | starts 2025-12 — **excluded from analysis** |
 
 Totals:
 - Raw data on disk: ~50 GB (`data/raw/ercot/`)

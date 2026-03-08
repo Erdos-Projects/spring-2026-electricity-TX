@@ -7,6 +7,7 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
 - Run and troubleshoot downloads: `DATA_DOWNLOAD.md` (full) or `DATA_DOWNLOAD_BRIEF.md` (quick-start)
 - Plan what to download, expected size, and expected time: `DATA_ESTIMATION.md`
 - Clean and validate downloaded data: `DATA_CLEANING.md`
+- Volatility clustering model analysis plan: `MODEL_ANALYSIS.md`
 
 ## Current Data Inventory (as of 2026-02-27)
 
@@ -26,7 +27,7 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
 | `NP4-188-CD` | DA ancillary prices | 104 | 18M | |
 | `NP6-331-CD` | RT ancillary prices | 3 | 2.0M | from 2025-12 |
 | `NP3-233-CD` | Outage capacity | 104 | 989M | postDateTime 100% |
-| `NP3-911-ER` | 2-Day DAM AS reports | 104 | 49M | |
+| `NP3-911-ER` | ~~2-Day DAM AS reports~~ | 104 | 49M | **Excluded from analysis** — schema changed 4× across 2017–2025 (RRS cleared → REGUP offer curves → NSPNM self-arranged → NSPNM offer curves). Use `NP4-188-CD` instead. |
 
 Storage breakdown: raw 50G, archive 30G, compressed 8.4G, sample 725M.
 
@@ -36,6 +37,7 @@ Storage breakdown: raw 50G, archive 30G, compressed 8.4G, sample 725M.
 - `DATA_DOWNLOAD_BRIEF.md` — Quick-start: shortest end-to-end setup-to-run flow.
 - `DATA_ESTIMATION.md` — Dataset-selection planning: coverage snapshot, time estimates from run logs, actual downloaded sizes.
 - `DATA_CLEANING.md` — Cleaning and analysis prep: dedupe keys, interval handling, validation checklist, EDA merge template.
+- `MODEL_ANALYSIS.md` — Volatility clustering analysis: model selection (GARCH, regime-switching, HAR-RV, ML), EDA roadmap, benchmark design, evaluation framework.
 - `GIT_TERMINAL.md` — Beginner Git guide: fetch/pull, stage, commit, push, merge, conflict resolution.
 - `config/download.sample.yaml` — Starter config. Copy to `config/download.yaml` for local use: `mkdir -p config && cp config/download.sample.yaml config/download.yaml`
 - `Makefile` — Shortcut commands. Run `make help` to see available targets.

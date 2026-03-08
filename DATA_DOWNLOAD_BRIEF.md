@@ -10,16 +10,16 @@ Supported datasets in this workflow (13 total):
 - `NP6-346-CD`
 - `NP3-565-CD`
 - `NP4-732-CD`
-- `NP4-745-CD`
+- ~~`NP4-745-CD`~~ — excluded (starts 2022-06, no pre-2022 coverage)
 - `NP6-905-CD`
 - `NP6-788-CD`
 - `NP4-523-CD`
 - `NP4-188-CD`
 - `NP3-233-CD`
-- `NP3-911-ER`
+- ~~`NP3-911-ER`~~ — excluded (incoherent schema, see DATA_DOWNLOAD.md §6)
 - `NP4-190-CD` (data starts 2014-05-01)
 - `NP6-345-CD` (data starts 2014-05-01)
-- `NP6-331-CD` (data starts 2025-12-04)
+- ~~`NP6-331-CD`~~ — excluded (starts 2025-12-04, only 3 months of data)
 
 ## 1) Enter project root
 Why this step: make sure config and script paths resolve.
@@ -82,7 +82,6 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP4-523-CD \
 --dataset NP4-188-CD \
 --dataset NP3-233-CD \
---dataset NP3-911-ER \
 --dataset NP4-190-CD \
 --dataset NP6-345-CD \
 --from-date 2017-07-01 \
@@ -98,6 +97,7 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 Range note:
 - `NP6-331-CD` starts at `2025-12-04`, so it is intentionally omitted from the `2017-07-01` to `2024-12-31` command.
 - `NP4-190-CD` and `NP6-345-CD` have data from `2014-05-01`. To download the full history before the shared window, run a separate command with `--from-date 2014-05-01 --to-date 2017-06-30`.
+- `NP3-911-ER` is omitted — its schema changed four times across 2017–2025, making it unusable as a coherent series. See DATA_DOWNLOAD.md §6 for details.
 
 ## 6) Check run output
 Why this step: verify summary, failures, and latest log quickly.
@@ -116,16 +116,18 @@ make resume-status
 ## 8) Add Missing `postDateTime` (No Rebuild)
 Why this step: keep existing monthly files, fill missing `postDateTime`, verify coverage, and remove redundant per-doc source files.
 
+Note: `NP3-911-ER` is excluded from this workflow — its schema is incoherent across the full date range (see DATA_DOWNLOAD.md §6). Example below uses `NP4-523-CD` (System Lambda).
+
 Date range used here:
-- `2017-07-01` to `2026-02-26` (today).
+- `2017-07-01` to `2025-12-31`.
 
 Dry run first:
 
 ```bash
 python3 scripts/backfill_post_datetime.py \
-  --dataset NP3-911-ER \
+  --dataset NP4-523-CD \
   --from-date 2017-07-01 \
-  --to-date 2026-02-26 \
+  --to-date 2025-12-31 \
   --mode add-missing \
   --order none \
   --fetch-missing-post-datetime \
@@ -139,9 +141,9 @@ Apply + verify/sort + cleanup:
 ```bash
 # 1) backfill (bulk downloads missing sources automatically, 256 docs per request)
 python3 scripts/backfill_post_datetime.py \
-  --dataset NP3-911-ER \
+  --dataset NP4-523-CD \
   --from-date 2017-07-01 \
-  --to-date 2026-02-26 \
+  --to-date 2025-12-31 \
   --mode add-missing \
   --order none \
   --fetch-missing-post-datetime \
@@ -150,27 +152,18 @@ python3 scripts/backfill_post_datetime.py \
 
 # 2) verify + enforce ascending order if needed
 python3 scripts/backfill_post_datetime.py \
-  --dataset NP3-911-ER \
+  --dataset NP4-523-CD \
   --from-date 2017-07-01 \
-  --to-date 2026-02-26 \
+  --to-date 2025-12-31 \
   --mode add-missing \
   --order ascending \
   --verify
 
-# 3) delete redundant source files once coverage is complete
+# 3) archive redundant source files once coverage is complete
 python3 scripts/backfill_post_datetime.py \
-  --dataset NP3-911-ER \
+  --dataset NP4-523-CD \
   --from-date 2017-07-01 \
-  --to-date 2026-02-26 \
-  --mode add-missing \
-  --order none \
-  --delete-redundant-sources
-
-# 3-alt) archive redundant source files instead of deleting
-python3 scripts/backfill_post_datetime.py \
-  --dataset NP3-911-ER \
-  --from-date 2017-07-01 \
-  --to-date 2026-02-26 \
+  --to-date 2025-12-31 \
   --mode add-missing \
   --order none \
   --archive-redundant-sources-dir data/archive/ercot
@@ -208,18 +201,30 @@ Backfill performance summary:
 - Row counting uses fast line splitting (9.4× faster than DictReader).
 - Each source file is read once and cached in memory for the full backfill pass.
 
-## postDateTime Backfill Status (as of 2026-02-27)
+## postDateTime Backfill Status (as of 2026-03-06)
 
-All priority-1 datasets and NP3-565-CD have been fully backfilled, verified, sorted ascending, and source files archived:
+All datasets have been fully backfilled, verified, sorted ascending, and per-doc source files cleaned up:
 
-| Dataset | Months | Rows | Fill | Archived to |
-|---|---:|---:|---|---|
-| `NP6-346-CD` | 104 | — | 100% | `data/archive/ercot/NP6-346-CD/` |
-| `NP3-233-CD` | 104 | 13.7M | 100% | `data/archive/ercot/NP3-233-CD/` |
-| `NP6-905-CD` | 104 | 240.9M | 100% | `data/archive/ercot/NP6-905-CD/` |
-| `NP3-565-CD` | 104 | 105.5M | 100% | `data/archive/ercot/NP3-565-CD/` |
+| Dataset | Months | Rows | Fill |
+|---|---:|---:|---|
+| `NP6-346-CD` | 104 | 75,937 | 100% |
+| `NP3-233-CD` | 104 | 13,719,192 | 100% |
+| `NP4-732-CD` | 104 | 16,398,776 | 100% |
+| `NP4-745-CD` | 45 | 6,909,206 | 100% |
+| `NP4-523-CD` | 104 | 75,961 | 100% |
+| `NP4-188-CD` | 104 | 327,749 | 100% |
+| `NP6-331-CD` | 3 | 38,400 | 100% |
+| `NP3-565-CD` | 104 | 105,527,360 | 100% |
+| `NP6-905-CD` | 104 | 240,931,800 | 100% |
+| `NP4-190-CD` | 142 | 76,176,337 | 100% |
+| `NP6-345-CD` | 142 | 103,870 | 100% |
+| `NP6-788-CD` | 25 | 210,638,178 | N/A — no `postDateTime` col (uses `SCEDTimestamp`) |
+| `NP3-911-ER` | 104 | 1,044,127 | 100% — excluded from analysis (incoherent schema) |
 
-`NP6-788-CD` has no `postDateTime` column (uses `SCEDTimestamp`); backfill does not apply.
+Notes:
+- `NP4-745-CD`, `NP6-331-CD`, `NP6-788-CD` monthly CSVs are in `data/archive/ercot/<DATASET>/`.
+- `NP3-911-ER` monthly CSVs are in `data/archive/ercot/NP3-911-ER/`; exclude from all analysis.
+- All per-doc source files have been cleaned up from both `data/raw/` and `data/archive/`.
 
 ## 9) Clear credentials
 Why this step: remove secrets from current shell session.

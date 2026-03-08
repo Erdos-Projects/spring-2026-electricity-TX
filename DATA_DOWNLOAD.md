@@ -146,7 +146,6 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP3-233-CD \
 --dataset NP6-788-CD \
 --dataset NP4-188-CD \
---dataset NP3-911-ER \
 --dataset NP4-190-CD \
 --dataset NP6-345-CD \
 --from-date 2017-07-01 \
@@ -163,7 +162,6 @@ Dataset override template (explicit CLI dataset list):
 make download DOWNLOAD_FLAGS="--datasets-only \
 --dataset NP6-788-CD \
 --dataset NP4-188-CD \
---dataset NP3-911-ER \
 --from-date 2024-11-01 \
 --to-date 2024-12-31 \
 --bulk-chunk-size 256 \
@@ -172,8 +170,10 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 ```
 
 Range notes:
-- `NP6-331-CD` currently starts at `2025-12-04`; include it only when `--to-date` reaches that period.
 - `NP4-190-CD` and `NP6-345-CD` have data from `2014-05-01`. The shared-range command covers `2017-07-01` onward; to download their full history, run a separate command with `--from-date 2014-05-01 --to-date 2017-06-30`.
+- `NP3-911-ER` is **excluded from all analysis commands**. Its schema changed four times across the 2017–2025 range, making it an incoherent time series. See Known Data Quality Issues in §6 for details. Use `NP4-188-CD` for ancillary service prices instead.
+- `NP4-745-CD` is **excluded from analysis** — solar data starts 2022-06-28 with no pre-2022 coverage, breaking the 2017–2025 full-window analysis.
+- `NP6-331-CD` is **excluded from analysis** — starts 2025-12-04 with only 3 months of data.
 
 `--datasets-only` selection behavior:
 - If CLI `--dataset` flags are present, only those CLI dataset IDs are used.
@@ -512,25 +512,54 @@ python3 scripts/backfill_post_datetime.py \
 
 ### postDateTime Backfill Status
 
-Last updated: `2026-02-27`
+Last updated: `2026-03-06`
 
-| Dataset ID | Monthly CSVs | Total Rows | postDateTime Filled | Missing Rows | Sorted | Sources Archived |
+| Dataset ID | Monthly CSVs | Total Rows | postDateTime Filled | Missing Rows | Sorted | Per-doc Sources |
 |---|---:|---:|---:|---:|---|---|
-| `NP6-346-CD` | 104/104 | — | 100% | 0 | ascending | `data/archive/ercot/NP6-346-CD/` |
-| `NP3-233-CD` | 104/104 | 13,719,192 | 100% | 0 | ascending | `data/archive/ercot/NP3-233-CD/` |
-| `NP6-905-CD` | 104/104 | 240,931,800 | 100% | 0 | ascending | `data/archive/ercot/NP6-905-CD/` |
-| `NP3-565-CD` | 104/104 | 105,527,360 | 100% | 0 | ascending | `data/archive/ercot/NP3-565-CD/` |
+| `NP6-346-CD` | 104/104 | 75,937 | 100% | 0 | ascending | none remaining |
+| `NP3-233-CD` | 104/104 | 13,719,192 | 100% | 0 | ascending | none remaining |
+| `NP4-732-CD` | 104/104 | 16,398,776 | 100% | 0 | ascending | none remaining |
+| `NP4-745-CD` | 45/45 | 6,909,206 | 100% | 0 | ascending | none remaining |
+| `NP4-523-CD` | 104/104 | 75,961 | 100% | 0 | ascending | none remaining |
+| `NP4-188-CD` | 104/104 | 327,749 | 100% | 0 | ascending | none remaining |
+| `NP6-331-CD` | 3/3 | 38,400 | 100% | 0 | ascending | none remaining |
+| `NP3-565-CD` | 104/104 | 105,527,360 | 100% | 0 | ascending | none remaining |
+| `NP6-905-CD` | 104/104 | 240,931,800 | 100% | 0 | ascending | none remaining |
+| `NP4-190-CD` | 142/142 | 76,176,337 | 100% | 0 | ascending | none remaining |
+| `NP6-345-CD` | 142/142 | 103,870 | 100% | 0 | ascending | none remaining |
+| `NP6-788-CD` | 25/25 | 210,638,178 | N/A | — | — | none remaining |
+| `NP3-911-ER` | 104/104 | 1,044,127 | 100% | 0 | — | none remaining |
 
 Notes:
 - Backfill uses `--fetch-missing-post-datetime` to get docId→postDateTime mappings from the ERCOT archive API.
 - Source files are matched to monthly CSV rows via fingerprint-based row matching.
 - Minor fingerprint collisions occur in some months (< 0.1% of rows) but do not affect fill rate.
-- Archived sources are moved to `data/archive/ercot/<DATASET>/`, keeping only the latest active month's sources in `data/raw/`.
+- All per-doc source files have been cleaned up from both `data/raw/` and `data/archive/`.
 - `NP6-788-CD` does not have a `postDateTime` column (first column is `SCEDTimestamp`); backfill does not apply.
+- `NP3-911-ER` is excluded from analysis (incoherent schema); monthly CSVs are at `data/archive/ercot/NP3-911-ER/`.
+- `NP4-745-CD` and `NP6-331-CD` monthly CSVs are at `data/archive/ercot/<DATASET>/` (not `data/raw/`).
+- `NP6-788-CD` monthly CSVs are at `data/archive/ercot/NP6-788-CD/`.
 
 ### Known Data Quality Issues
 
 These are source-level anomalies in ERCOT data that cannot be resolved by re-downloading or re-backfilling.
+
+#### NP3-911-ER — Incoherent schema across time (exclude from analysis)
+
+This dataset's schema changed four times between 2017 and 2025, each time reporting a completely different ancillary service metric:
+
+| Period | Column(s) | Content | Rows/month |
+|---|---|---|---|
+| 2017-07 → 2020-09 | `Total Cleared AS - RRS Load` | Hourly MW of RRS cleared for load | ~720 |
+| 2020-10 → 2022-05 | `MW Offered, REGUP Offer Price` | REGUP offer curves (many offers per hour) | 34k–61k |
+| 2022-06 → 2025-11 | `Total Self-Arranged AS - NSPNM` | Hourly MW of self-arranged Non-Spinning Reserve | ~720 |
+| 2025-12 → present | `MW Offered, NSPNM Offer Price` | NSPNM offer curves | ~1k–2k |
+
+2020-09 is a transitional month (6,507 rows) containing a mix of both early and late formats.
+
+Status: **exclude from analysis** — the data on disk is structurally intact, but each schema phase covers a different ancillary service and alternates between cleared quantities and offer curves. The series cannot be used as a single coherent input.
+
+Use `NP4-188-CD` (MCPC — Market Clearing Price for Capacity) for ancillary service prices. It covers RRS, REGUP, REGDN, NSPIN (all years), and ECRS (from 2023-06) with a consistent schema across the full range.
 
 #### NP4-190-CD — Misaligned rows (3 months)
 

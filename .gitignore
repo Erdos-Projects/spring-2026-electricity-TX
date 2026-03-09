@@ -25,6 +25,13 @@
 /data/raw/ercot/**/2026/**/*.csv
 /data/raw/ercot/**/2026/**/*.csv.docids
 
+# ── data/raw/weather ──────────────────────────────────────────────────────────
+!/data/raw/weather/
+/data/raw/weather/*
+!/data/raw/weather/*avg.csv
+!/data/raw/weather/*stdev.csv
+
+
 # ── data/sample/ ─────────────────────────────────────────────────────────────
 # Track curated sample data only (Dec 2025 monthly CSV files).
 /data/sample/*

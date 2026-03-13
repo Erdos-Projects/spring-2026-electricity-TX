@@ -54,6 +54,7 @@ __pycache__/
 .ipynb_checkpoints/
 LOCAL_DOWNLOAD_NOTES.md
 CLAUDE.md
+agent_notes/
 config/download.yaml
 state/
 logs/downloads/

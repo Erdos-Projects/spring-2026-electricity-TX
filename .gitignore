@@ -46,6 +46,12 @@
 /data/sample/weather/*
 !/data/sample/weather/**2025-12.csv
 
+# ── data/processed/ ───────────────────────────────────────────────────────────
+!/data/processed/
+!/data/processed/ercot/
+!/data/processed/weather/
+!/data/processed/**/*.parquet
+
 # ── tooling & environment ─────────────────────────────────────────────────────
 *.log
 .DS_Store
@@ -57,4 +63,6 @@ CLAUDE.md
 agent_notes/
 config/download.yaml
 state/
-logs/downloads/
+logs/
+.vscode/
+*.xlsx

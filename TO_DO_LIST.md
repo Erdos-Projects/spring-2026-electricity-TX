@@ -29,14 +29,18 @@ Team: Yun, Eric, Neeraj (+ others)
 
 ## 🔥 High Priority — Remaining (Day 3)
 
-- [ ] **Run Sections 7.3–7.5** — execute cells in eda.ipynb, record final R² for 7.5, update model_results.md with actual numbers
-- [ ] **Error analysis** — where does XGBoost v3 fail most? Plot residuals by hour, month, year; flag extreme spike hours
+- [ ] **Run Sections 7.3–8** — execute cells in eda.ipynb in order; record final R² from 7.5; update model_results.md with actual numbers
 - [ ] **Presentation notebook** — clean summary for Erdos showcase (1 notebook, key plots + model leaderboard)
+- [x] **Error analysis** — Section 8 added: MAE by hour/month, spike vs non-spike, 10 worst predictions, PR-AUC + Brier score
+- [x] **Bug fix** — Section 7.3 now includes all 34 engineered features (was missing 7 v2 features)
+- [x] **all_features.parquet** — saved with all 35 features + split label at data/processed/ercot/
 
 ---
 
 ## 🟡 Medium Priority
 
+- [ ] **Fix drop_duplicates in data_cleaning.ipynb** — 6 datasets (load346, load345, lam, anc, dam, rtm905) missing `keep='last'` + sort by postDateTime. Add `.sort_values('post_datetime').drop_duplicates(..., keep='last')`. Only affects re-runs; current parquets are correct.
+- [ ] **Fix weather_data_processing.py path** — change `../data/raw/weather/` to `data/raw/weather/` so it runs from project root.
 - [ ] **Update model leaderboard** with Section 7.5 winner
 - [ ] **Spike classifier error analysis** — which spikes are missed? precision/recall by price range
 - [ ] **Commit presentation notebook** once drafted

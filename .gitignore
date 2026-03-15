@@ -36,6 +36,10 @@
 !/data/sample/ercot/**/2025/
 !/data/sample/ercot/**/2025/12/
 !/data/sample/ercot/**/2025/12/*.csv
+# Large sample files excluded from git (>100MB)
+/data/sample/ercot/NP3-565-CD/
+/data/sample/ercot/NP6-788-CD/
+/data/sample/ercot/NP6-905-CD/
 !/data/sample/weather
 /data/sample/weather/*
 !/data/sample/weather/**2025-12.csv

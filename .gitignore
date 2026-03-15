@@ -1,54 +1,5 @@
-# ── data/ root ──────────────────────────────────────────────────────────────
-/data/*
-!/data/raw/
-!/data/sample/
-# data/archive/ — archived redundant source files (data/archive/ercot/<DATASET>/...)
-#   not tracked; large number of per-doc CSVs, not needed in git.
-
-# ── data/raw/ ────────────────────────────────────────────────────────────────
-/data/raw/*
-!/data/raw/ercot/
-
-# ── data/raw/ercot/ ──────────────────────────────────────────────────────────
-/data/raw/ercot/*
-# sortcache sidecar files produced by download/sort scripts — not tracked.
-/data/raw/ercot/**/*.sortcache.json
-# NP6-346-CD raw CSVs not tracked in git — regenerate via scripts/backfill_post_datetime.py
-
-# Do not upload 2026 raw data files (applies to all datasets, including NP6-346-CD).
-/data/raw/ercot/**/2026/**/*.csv
-/data/raw/ercot/**/2026/**/*.csv.docids
-
-# ── data/raw/weather ──────────────────────────────────────────────────────────
-!/data/raw/weather/
-/data/raw/weather/*
-!/data/raw/weather/*avg*.csv
-!/data/raw/weather/*stdev*.csv
-
-
-# ── data/sample/ ─────────────────────────────────────────────────────────────
-# Track curated sample data only (Dec 2025 monthly CSV files).
-/data/sample/*
-!/data/sample/README.md
-!/data/sample/ercot/
-/data/sample/ercot/*
-!/data/sample/ercot/**/
-!/data/sample/ercot/**/2025/
-!/data/sample/ercot/**/2025/12/
-!/data/sample/ercot/**/2025/12/*.csv
-# Large sample files excluded from git (>100MB)
-/data/sample/ercot/NP3-565-CD/
-/data/sample/ercot/NP6-788-CD/
-/data/sample/ercot/NP6-905-CD/
-!/data/sample/weather
-/data/sample/weather/*
-!/data/sample/weather/**2025-12.csv
-
-# ── data/processed/ ───────────────────────────────────────────────────────────
-!/data/processed/
-!/data/processed/ercot/
-!/data/processed/weather/
-!/data/processed/**/*.parquet
+# ── data/ ─────────────────────────────────────────────────────────────────────
+/data/
 
 # ── tooling & environment ─────────────────────────────────────────────────────
 *.log

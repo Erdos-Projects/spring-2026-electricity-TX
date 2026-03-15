@@ -33,14 +33,13 @@ Storage breakdown: raw 50G, archive 30G, compressed 8.4G, sample 725M.
 
 ## Documentation Map
 
-- `DATA_DOWNLOAD.md` — Full download runbook: setup, credentials, canonical commands, structured logs, DNS troubleshooting, postDateTime backfill, Git LFS.
+- `DATA_DOWNLOAD.md` — Full download runbook: setup, credentials, canonical commands, structured logs, DNS troubleshooting, postDateTime backfill. Note: Git LFS sections in this file are outdated — LFS has been removed from the project.
 - `DATA_DOWNLOAD_BRIEF.md` — Quick-start: shortest end-to-end setup-to-run flow.
 - `DATA_ESTIMATION.md` — Dataset-selection planning: coverage snapshot, time estimates from run logs, actual downloaded sizes.
 - `DATA_CLEANING.md` — Cleaning and analysis prep: dedupe keys, interval handling, validation checklist, EDA merge template.
 - `MODEL_ANALYSIS.md` — Volatility clustering analysis: model selection (GARCH, regime-switching, HAR-RV, ML), EDA roadmap, benchmark design, evaluation framework.
 - `GIT_TERMINAL.md` — Beginner Git guide: fetch/pull, stage, commit, push, merge, conflict resolution.
 - `config/download.sample.yaml` — Starter config. Copy to `config/download.yaml` for local use: `mkdir -p config && cp config/download.sample.yaml config/download.yaml`
-- `Makefile` — Shortcut commands. Run `make help` to see available targets.
 
 ## Core Scripts
 
@@ -69,11 +68,11 @@ Legacy script (root): `ercot_batch_downloader.py` — superseded by `scripts/dow
 
 1. Choose datasets for your task:
    - Use `scripts/list_ercot_analysis_datasets.py`, `DATA_DOWNLOAD.md` (dataset selection and run commands), and `DATA_ESTIMATION.md` (size/time planning).
-   - Optionally run `make estimate-time` and `make estimate-size` to refresh local planning snapshots.
+   - Optionally run `python3 scripts/estimate_download_time.py` and `python3 scripts/estimate_dataset_size.py` to refresh local planning snapshots.
 2. Download raw data:
-   - Follow `DATA_DOWNLOAD.md` and use Makefile commands.
-   - Start with `make help`, then use `make download`, `make last-run`, `make resume-status`.
-   - Use `make sort_csv` only when you want to re-sort existing local monthly CSVs without re-downloading.
+   - Follow `DATA_DOWNLOAD.md` and run scripts directly via `python3`.
+   - Use `python3 scripts/download_ercot_public_reports.py` for downloads, `python3 scripts/backfill_post_datetime.py` for backfill.
+   - Use `python3 scripts/sort_csv.py` only when you want to re-sort existing local monthly CSVs without re-downloading.
 3. Clean and merge for analysis:
    - Follow `DATA_CLEANING.md`.
 4. Run notebooks/EDA on processed outputs.

@@ -15,16 +15,16 @@ Scope:
 - Actual data on disk extends to `2026-02` from backfill and extended runs.
 - Pass explicit `--from-date` and `--to-date` in shared runs to avoid accidental default drift.
 
+> **Note (2026-03-15)**: Git LFS has been removed from this project. All data files are gitignored (`/data/` rule in `.gitignore`). The Makefile has also been removed — run scripts directly via `python3`.
+
 ## Table of Contents
 
 1. [Prepare Environment](#1-prepare-environment)
 2. [Run Canonical Download Command (Date-Range Based)](#2-run-canonical-download-command-date-range-based)
 3. [Tune Logging and Progress](#3-tune-logging-and-progress)
 4. [Select Datasets (Priority + Usage)](#4-select-datasets-priority--usage)
-5. [Makefile Shortcuts](#5-makefile-shortcuts)
-6. [Resume Failed Runs and Handle Errors](#6-resume-failed-runs-and-handle-errors)
-7. [Diagnose DNS with Verbose Logging](#7-diagnose-dns-with-verbose-logging)
-8. [Apply Git LFS After Dataset Completion](#8-apply-git-lfs-after-dataset-completion)
+5. [Resume Failed Runs and Handle Errors](#5-resume-failed-runs-and-handle-errors)
+6. [Diagnose DNS with Verbose Logging](#6-diagnose-dns-with-verbose-logging)
 
 ## 1. Prepare Environment
 
@@ -171,7 +171,7 @@ make download DOWNLOAD_FLAGS="--datasets-only \
 
 Range notes:
 - `NP4-190-CD` and `NP6-345-CD` have data from `2014-05-01`. The shared-range command covers `2017-07-01` onward; to download their full history, run a separate command with `--from-date 2014-05-01 --to-date 2017-06-30`.
-- `NP3-911-ER` is **excluded from all analysis commands**. Its schema changed four times across the 2017–2025 range, making it an incoherent time series. See Known Data Quality Issues in §6 for details. Use `NP4-188-CD` for ancillary service prices instead.
+- `NP3-911-ER` is **excluded from all analysis commands**. Its schema changed four times across the 2017–2025 range, making it an incoherent time series. See Known Data Quality Issues in §5 for details. Use `NP4-188-CD` for ancillary service prices instead.
 - `NP4-745-CD` is **excluded from analysis** — solar data starts 2022-06-28 with no pre-2022 coverage, breaking the 2017–2025 full-window analysis.
 - `NP6-331-CD` is **excluded from analysis** — starts 2025-12-04 with only 3 months of data.
 
@@ -323,24 +323,7 @@ python3 scripts/list_ercot_analysis_datasets.py
 
 For storage/time estimation and planning, use `DATA_ESTIMATION.md`.
 
-## 5. Makefile Shortcuts
-
-Use these as your default download operations:
-
-```bash
-make help
-make download
-make sort_csv
-make last-run
-make resume-status
-```
-
-Notes:
-- Run downloads with the canonical command in Section 2.
-- `make sort_csv` is optional for re-sorting already-downloaded local monthly CSV files.
-- Use `DATA_ESTIMATION.md` for size/time estimate workflows.
-
-## 6. Resume Failed Runs and Handle Errors
+## 5. Resume Failed Runs and Handle Errors
 
 When a run fails:
 - Rerun the same command after interruptions.
@@ -577,7 +560,7 @@ Expected columns: `postDateTime, DeliveryDate, HourEnding, SettlementPoint, Sett
 
 Status: **resolved** — the 3 malformed rows were deleted from their respective monthly CSVs (2024-05, 2025-09, 2025-10). Re-downloading or re-backfilling cannot recover these rows; the underlying source documents are malformed.
 
-## 7. Diagnose DNS with Verbose Logging
+## 6. Diagnose DNS with Verbose Logging
 
 Use this loop to diagnose unstable API connectivity.
 
@@ -610,43 +593,3 @@ Share the latest DNS log quickly:
 tail -n 40 "$(ls -1t logs/dns_health_*.log | head -n 1)"
 ```
 
-## 8. Apply Git LFS After Dataset Completion
-
-Install and initialize:
-
-```bash
-brew install git-lfs
-git lfs install
-git lfs version
-```
-
-Track and migrate completed dataset files (example: `NP6-346-CD`):
-
-```bash
-git lfs track "data/raw/ercot/NP6-346-CD/**/*.csv"
-git add .gitattributes
-git add --renormalize data/raw/ercot/NP6-346-CD
-git lfs ls-files | rg "NP6-346-CD" | head
-```
-
-Verify before push:
-
-```bash
-git lfs ls-files | rg "NP6-346-CD" | head -n 20
-rg "NP6-346-CD" .gitattributes
-```
-
-Optional: lock all files for one dataset (to reduce accidental edits):
-
-```bash
-# NP6-346-CD shortcut
-make lock-346
-
-# generic form
-make lock-dataset LOCK_DATASET=NP6-346-CD
-```
-
-Important:
-- LFS usage is based on uploaded object size per version.
-- Re-migrating/re-uploading incomplete datasets can consume quota quickly.
-- Migrate to LFS only after that dataset download is complete.

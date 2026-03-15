@@ -28,8 +28,8 @@
 # ── data/raw/weather ──────────────────────────────────────────────────────────
 !/data/raw/weather/
 /data/raw/weather/*
-!/data/raw/weather/*avg.csv
-!/data/raw/weather/*stdev.csv
+!/data/raw/weather/*avg*.csv
+!/data/raw/weather/*stdev*.csv
 
 
 # ── data/sample/ ─────────────────────────────────────────────────────────────

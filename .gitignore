@@ -13,13 +13,7 @@
 /data/raw/ercot/*
 # sortcache sidecar files produced by download/sort scripts — not tracked.
 /data/raw/ercot/**/*.sortcache.json
-!/data/raw/ercot/NP6-346-CD/
-# Keep directory traversal available for selective unignore rules.
-/data/raw/ercot/NP6-346-CD/**
-!/data/raw/ercot/NP6-346-CD/**/
-# Only track consolidated monthly outputs for this dataset.
-!/data/raw/ercot/NP6-346-CD/**/*.csv
-!/data/raw/ercot/NP6-346-CD/**/*.csv.docids
+# NP6-346-CD raw CSVs not tracked in git — regenerate via scripts/backfill_post_datetime.py
 
 # Do not upload 2026 raw data files (applies to all datasets, including NP6-346-CD).
 /data/raw/ercot/**/2026/**/*.csv

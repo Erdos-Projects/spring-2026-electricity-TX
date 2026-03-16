@@ -16,3 +16,5 @@ state/
 logs/
 .vscode/
 *.xlsx
+compressed/
+rolling_lasso_heatmap.png

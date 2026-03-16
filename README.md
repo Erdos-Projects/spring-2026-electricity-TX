@@ -4,10 +4,10 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
 
 ## Quick Doc Routing
 
-- Run and troubleshoot downloads: `DATA_DOWNLOAD.md` (full) or `DATA_DOWNLOAD_BRIEF.md` (quick-start)
+- Run and troubleshoot downloads: `DATA_DOWNLOAD.md`
 - Plan what to download, expected size, and expected time: `DATA_ESTIMATION.md`
-- Clean and validate downloaded data: `DATA_CLEANING.md`
 - Volatility clustering model analysis plan: `MODEL_ANALYSIS.md`
+- Task list and project status: `TO_DO_LIST.md`
 
 ## Current Data Inventory (as of 2026-02-27)
 
@@ -20,7 +20,7 @@ Repository for downloading, organizing, and analyzing ERCOT electricity data for
 | `NP3-565-CD` | Load forecast | 104 | 13G | postDateTime 100% |
 | `NP4-732-CD` | Wind actual/forecast | 104 | 2.0G | |
 | `NP4-745-CD` | Solar actual/forecast | 45 | 959M | from 2022-06 |
-| `NP6-905-CD` | RT settlement prices | 104 | 14G | postDateTime 100% |
+| `NP6-905-CD` | RT settlement prices (15-min) | 104 | 14G | postDateTime 100% |
 | `NP6-788-CD` | RT LMPs (per-SCED) | 25 | 14G | download in progress |
 | `NP4-190-CD` | DA settlement prices | 142 | 5.0G | from 2014-05 |
 | `NP4-523-CD` | DA system lambda | 104 | 4.7M | |
@@ -33,11 +33,10 @@ Storage breakdown: raw 50G, archive 30G, compressed 8.4G, sample 725M.
 
 ## Documentation Map
 
-- `DATA_DOWNLOAD.md` — Full download runbook: setup, credentials, canonical commands, structured logs, DNS troubleshooting, postDateTime backfill. Note: Git LFS sections in this file are outdated — LFS has been removed from the project.
-- `DATA_DOWNLOAD_BRIEF.md` — Quick-start: shortest end-to-end setup-to-run flow.
+- `DATA_DOWNLOAD.md` — Full download runbook: setup, credentials, canonical commands, structured logs, DNS troubleshooting, postDateTime backfill. Note: Git LFS has been removed; all data is gitignored.
 - `DATA_ESTIMATION.md` — Dataset-selection planning: coverage snapshot, time estimates from run logs, actual downloaded sizes.
-- `DATA_CLEANING.md` — Cleaning and analysis prep: dedupe keys, interval handling, validation checklist, EDA merge template.
 - `MODEL_ANALYSIS.md` — Volatility clustering analysis: model selection (GARCH, regime-switching, HAR-RV, ML), EDA roadmap, benchmark design, evaluation framework.
+- `TO_DO_LIST.md` — Team task list: completed work, immediate priorities, code fixes, collaboration notes.
 - `GIT_TERMINAL.md` — Beginner Git guide: fetch/pull, stage, commit, push, merge, conflict resolution.
 - `config/download.sample.yaml` — Starter config. Copy to `config/download.yaml` for local use: `mkdir -p config && cp config/download.sample.yaml config/download.yaml`
 
@@ -73,9 +72,11 @@ Legacy script (root): `ercot_batch_downloader.py` — superseded by `scripts/dow
    - Follow `DATA_DOWNLOAD.md` and run scripts directly via `python3`.
    - Use `python3 scripts/download_ercot_public_reports.py` for downloads, `python3 scripts/backfill_post_datetime.py` for backfill.
    - Use `python3 scripts/sort_csv.py` only when you want to re-sort existing local monthly CSVs without re-downloading.
-3. Clean and merge for analysis:
-   - Follow `DATA_CLEANING.md`.
-4. Run notebooks/EDA on processed outputs.
+3. Clean and process raw data:
+   - Run `data_cleaning.ipynb` to build processed parquets in `data/processed/ercot/`.
+   - Or extract `compressed/processed_ercot_2026-03-16.tar.gz` directly into `data/processed/`.
+4. Run EDA and models:
+   - Run `eda.ipynb` top-to-bottom (restart kernel first). Sections 1–5 are EDA; 6–8 are models.
 
 ## Collaboration Workflow
 
@@ -95,11 +96,11 @@ For all Git-related operations, use `GIT_TERMINAL.md`:
 - Archived source files:
   - `data/archive/ercot/<DATASET_ID>/...`
 - Compressed snapshots:
-  - `data/compressed/`
+  - `compressed/` (gitignored)
 - Sample data:
   - `data/sample/`
-- Processed outputs (not yet created):
-  - `data/processed/ercot/<DATASET_ID>/...`
+- Processed outputs:
+  - `data/processed/ercot/` (gitignored — share via `compressed/processed_ercot_2026-03-16.tar.gz`)
 - Run artifacts:
   - `logs/downloads/<YYYYMMDD_HHMMSS>/run.log`
   - `logs/downloads/<YYYYMMDD_HHMMSS>/failures.csv`

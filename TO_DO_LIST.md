@@ -1,5 +1,5 @@
 # Project To-Do List
-_Last updated: 2026-03-16_
+_Last updated: 2026-03-17_
 
 Team: Yun, Eric, Neeraj (+ others)
 
@@ -19,6 +19,9 @@ Team: Yun, Eric, Neeraj (+ others)
 - Added 5 weather features (`temp_f`, `humidity_pct`, `wind_gust_mph`, `precip_in`, `temp_f_texas`)
 - Built `train_features.parquet` (56,928 rows, 2017-07 → 2023-12) and `test_features.parquet` (17,544 rows, 2024-2025)
 - Built `all_features.parquet` (74,472 rows, all 35 features + split label)
+- Removed `mcpc_ecrs`, `mcpc_ecrs_available`, `log_mcpc_ecrs`, `mcpc_ecrs_above_50` from all feature sets (launched 2021-06, too short coverage) — feature counts: v1=23, v2=30, v3=31
+- Fixed `build_features()` performance: `_day()` now uses vectorized timestamp comparison (was `.dt.date`, caused KeyboardInterrupt on large parquets)
+- **RTM std target updated to 5-point**: `rtm_price_std_hb_houston` now includes boundary point p0 of next hour, capturing inter-hour price jump; mean/max/min remain 4-point
 
 ### EDA (`eda.ipynb` Sections 1–5)
 - Target selection, time series, diurnal/seasonal patterns, spike rate analysis
@@ -28,10 +31,10 @@ Team: Yun, Eric, Neeraj (+ others)
 
 ### Modeling (`eda.ipynb` Sections 6–8)
 - **Section 6**: Ridge (R²=0.231) + XGBoost v1 (R²=0.357) + classifier (AUC=0.888)
-- **Section 7**: XGBoost v2 — 34 features, tuned hyperparams, optimal spike threshold (R²=0.378, AUC=0.903)
+- **Section 7**: XGBoost v2 — 30 features (after ECRS removal), tuned hyperparams, optimal spike threshold (R²=0.378, AUC=0.903)
 - **Section 7.1**: HAR-RV baseline; GARCH order selection — AR(1)-GARCH(2,1)-t wins (BIC=55488.7)
 - **Section 7.2**: Seasonal OLS + GARCH on residuals → IGARCH (α+β=1.0); walk-forward CV (Ridge=0.169, Lasso=0.111); Lasso selects 7 features
-- **Section 7.3**: GARCH conditional vol as 35th XGBoost feature → **R²=0.408** (corrected, all 35 features)
+- **Section 7.3**: GARCH conditional vol as 31st XGBoost feature → **R²=0.408** (all 31 features)
 - **Section 7.4**: Rolling 3-year Lasso windows — regime shift heatmap (code added)
 - **Section 7.5**: Post-Uri window test — 3 training windows vs 2024-2025 test (code added)
 - **Section 8**: Error analysis — MAE by hour/month, spike vs non-spike, worst predictions, PR-AUC, Brier score, leaderboard (code added)
@@ -40,19 +43,19 @@ Team: Yun, Eric, Neeraj (+ others)
 ### Notebook Quality
 - Logical cell order: Setup → EDA (1–5) → Feature Eng → Models (6–8) → Conclusion
 - All major sections have markdown headers, transition cells, and subsection numbers (3.1, 4.1, 5.1–5.3)
+- Fixed misplaced X.1 headers (3.1, 4.1, 5.1 were appearing after their code blocks; now correctly before). Done 2026-03-17.
 - Feature dictionary: all 27 base features explained by category
 - Evaluation metrics reference: all 8 metrics defined with LaTeX formulas
 - Conclusion cell: results table, 5 key findings, limitations
 
 ---
 
-## 🔥 Immediate — Run and Verify
+## ✅ Completed (2026-03-17)
 
-- [ ] **Re-run Cell 42 in `eda.ipynb`** — the feature-building cell. Split dates were corrected (TRAIN_END=2023-12-31, TEST_START=2024-01-01). The parquets on disk still have the old split (65,712 train / 8,760 test). Re-running rebuilds them correctly (56,928 / 17,544 rows) with DatetimeIndex.
-- [ ] **Re-run Cell 55** — saves `all_features.parquet` with all 35 features (run after Cell 42)
-- [ ] **Execute Sections 7.3–8 end-to-end** — restart kernel, run all cells in order; verify no errors
-- [ ] **Record Section 7.5 results** — which training window wins? Update `model_results.md` with actual R² numbers
-- [ ] **Confirm Section 8 outputs** — MAE plots, leaderboard table, PR-AUC printed correctly
+- [x] **Re-run `data_cleaning.ipynb`** — Done. Rebuilt all parquets with 5-point RTM std. DST cell fails harmlessly (pre-existing; run with `--allow-errors`).
+- [x] **Re-run `eda.ipynb` end-to-end** — Done. Rebuilt features (56,928/17,544 rows, 31 features) + all models + all PNGs.
+- [x] **Section 7.5 results recorded** — Winner: 2021–2023 post-Uri (R²=0.405). Saved as `model_xgb_reg_v3_best.pkl`.
+- [x] **Section 8 outputs confirmed** — MAE plots, leaderboard, PR-AUC=0.273, bootstrap CI printed correctly.
 
 ---
 

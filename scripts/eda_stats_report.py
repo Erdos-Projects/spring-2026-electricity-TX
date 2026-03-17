@@ -259,13 +259,13 @@ if df_188 is not None:
 
 
 # ============================================================
-# NP3-233-CD: Generation capacity by zone (2024-12 only — large)
+# NP3-233-CD: Resource Outage Capacity by zone (2024-12 only — large)
 # ============================================================
-print("\n\nLoading NP3-233-CD (generation capacity by zone, 2024-12 only)...")
+print("\n\nLoading NP3-233-CD (outage capacity by zone, 2024-12 only)...")
 df_233 = load_months("NP3-233-CD", [202412])
 if df_233 is not None:
     flags = check_flags("NP3-233-CD", df_233)
-    report_dataset("NP3-233-CD — Generation Capacity by Zone (2024-12 only)", df_233, flags)
+    report_dataset("NP3-233-CD — Outage Capacity by Zone (2024-12 only)", df_233, flags)
     print(f"\nSUMMARY: {len(df_233):,} rows; 14 cols; total resource, IRR, and new equipment "
           f"MW by zone (South/North/West/Houston); integer MW values.")
 

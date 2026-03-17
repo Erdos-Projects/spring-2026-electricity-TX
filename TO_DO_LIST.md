@@ -70,9 +70,9 @@ Team: Yun, Eric, Neeraj (+ others)
 
 ## 🟡 Medium Priority — Code Fixes
 
-- [ ] **Fix `scripts/eda_stats_report.py` line ~264** — "generation capacity" → "outage capacity" (NP3-233-CD naming). Minor cosmetic fix.
-- [ ] **Fix `drop_duplicates` in `data_cleaning.ipynb`** — 6 datasets missing `keep='last'` before sort by postDateTime. Add `.sort_values('post_datetime').drop_duplicates(..., keep='last')`. Only affects re-runs; current parquets are correct.
-- [ ] **Fix `scripts/weather_data_processing.py` path** — change `../data/raw/weather/` → `data/raw/weather/` so it runs from project root.
+- [x] **Fix `scripts/eda_stats_report.py` line ~264** — "generation capacity" → "outage capacity" (NP3-233-CD naming). Done 2026-03-17.
+- [x] **Fix `drop_duplicates` in `data_cleaning.ipynb`** — 8 datasets fixed: added `.sort_values('post_datetime').drop_duplicates(..., keep='last')`. Only affects re-runs; current parquets are correct. Done 2026-03-17.
+- [x] **Fix `scripts/weather_data_processing.py` path** — changed `../data/raw/weather/` → `data/raw/weather/` (5 occurrences). Done 2026-03-17.
 
 ---
 

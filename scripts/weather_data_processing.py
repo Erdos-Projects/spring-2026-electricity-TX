@@ -15,7 +15,7 @@ def weather_processing():
 
 
     # 1. Get your paths (as Path objects for easy naming)
-    directory = Path("../data/raw/weather/")
+    directory = Path("data/raw/weather/")
     paths = [f for f in directory.rglob("*.csv") if f.parent != directory]
     print(f'working in {directory}')
 
@@ -57,7 +57,7 @@ def weather_processing():
         .reset_index()
     )
     texas_avg.insert(1,column='station_code',value='Texas_avg')
-    texas_avg.to_csv('../data/raw/weather/texas_avg.csv',index=False)
+    texas_avg.to_csv('data/raw/weather/texas_avg.csv',index=False)
 
 
     #create standard deviation for texas
@@ -67,7 +67,7 @@ def weather_processing():
         .reset_index()
     )
     texas_stdev.insert(1,column='station_code',value='Texas_stdev')
-    texas_stdev.to_csv('../data/raw/weather/texas_stdev.csv',index=False)
+    texas_stdev.to_csv('data/raw/weather/texas_stdev.csv',index=False)
 
     print(f'texas_avg, texas_stdev written to {directory}')
 
@@ -78,7 +78,7 @@ def weather_processing():
         .reset_index()
     )
     houston_avg.insert(1,column='station_code',value='Houston_avg')
-    houston_avg.to_csv('../data/raw/weather/houston_avg.csv',index=False)
+    houston_avg.to_csv('data/raw/weather/houston_avg.csv',index=False)
 
 
     #create standard deviation for houston
@@ -88,7 +88,7 @@ def weather_processing():
         .reset_index()
     )
     houston_stdev.insert(1,column='station_code',value='Houston_stdev')
-    houston_stdev.to_csv('../data/raw/weather/houston_stdev.csv',index=False)
+    houston_stdev.to_csv('data/raw/weather/houston_stdev.csv',index=False)
 
     print(f'houston_avg, houston_stdev written to {directory}')
 

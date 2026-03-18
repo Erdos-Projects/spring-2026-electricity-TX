@@ -1,5 +1,5 @@
 # Project To-Do List
-_Last updated: 2026-03-18 (session 3)_
+_Last updated: 2026-03-18 (session 4)_
 
 Team: Yun, Eric, Neeraj (+ others)
 
@@ -87,6 +87,24 @@ Team: Yun, Eric, Neeraj (+ others)
   - Filled Conclusion TBDs: all model R² values, PR-AUC 0.269, F1 0.338, spike ratio 2.5×; added drift finding (6th key finding)
   - Fixed `krj9cpi4w3j` save cell: "≤2023 from test (2024–2025)" → "≤2024 from test (2025)"
 - [x] **Final consistency pass** — stale "2024–2025" test date references fixed in 4 additional cells (`lfl8i3ow8mp`, `cdelxch0xcn` ×2, `6fjl1b32fne`); Section 9 added to intro TOC; XGB v2 CV R² 0.289→0.273 corrected; train/test/holdout summary added to intro cell.
+
+---
+
+## ✅ Completed (2026-03-18 session 4)
+
+- [x] **Houston-only weather features** — dropped `temp_f_texas_avg` from all feature sets (build_features, FEAT_V2 lists in 5 code cells, Feature Dictionary, Section 3.6 table). Feature counts: v1=22, v2=29, v3=30.
+- [x] **Added XGBoost classifier v3** — added to Section 7.3 (`zqsinbn9kv`) using `FEAT_V3` (30 feats incl. `garch_cond_vol`). Section 8 (`lsctyepdxx`) updated to load `model_xgb_clf_v3.pkl` and use FEAT_V3.
+- [x] **Fixed SPIKE_THRESHOLD inconsistency** — `SPIKE_THRESHOLD = 500` in eda-imports is EDA-only (clarified with comment); Section 5.2 plan table now explicitly says `> $100/MWh` instead of `> SPIKE_THRESHOLD`. Model's `spike_flag = (rtm_price_mean > 100)` is unambiguous.
+- [x] **Feature count consistency pass** — updated all "23/30/31 features" references to "22/29/30" across 23 cells total. Lasso zeros-out count updated: 23/30 → 24/29 (5 survivors unchanged).
+
+---
+
+## ⚠️ Rebuild Required (next session)
+
+- [ ] **Rebuild parquets and re-run models** — required after Houston-only weather change:
+  - Rebuild `train_features.parquet`, `test_features.parquet`, `all_features.parquet` (drop `temp_f_texas_avg` column)
+  - Retrain all models: v2 reg, v2 clf, v3 reg, v3 clf, Section 7.5 best window, rolling Lasso, Section 9
+  - Update all output metrics in markdown cells after retraining
 
 ---
 

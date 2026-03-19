@@ -23,13 +23,13 @@ Team: Yun, Eric, Neeraj (+ others)
 - Fixed `build_features()` performance: `_day()` now uses vectorized timestamp comparison (was `.dt.date`, caused KeyboardInterrupt on large parquets)
 - **RTM std target updated to 5-point**: `rtm_price_std_hb_houston` now includes boundary point p0 of next hour, capturing inter-hour price jump; mean/max/min remain 4-point
 
-### EDA (`eda.ipynb` Sections 1–5)
+### EDA (`analysis.ipynb` Sections 1–5)
 - Target selection, time series, diurnal/seasonal patterns, spike rate analysis
 - Feature EDA: net load, wind error, forecast revision std, DAM price, ancillary prices
 - Regime analysis: Winter Storm Uri (Feb 2021), high-volatility hours, autocorrelation
 - Modeling roadmap: feature correlations, modeling plan, data design explanation
 
-### Modeling (`eda.ipynb` Sections 6–9)
+### Modeling (`analysis.ipynb` Sections 6–9)
 - **Section 6**: Ridge (R²=0.231) + XGBoost v1 (R²=0.357) + classifier (AUC=0.888)
 - **Section 7**: XGBoost v2 — 30 features (after ECRS removal), tuned hyperparams, optimal spike threshold (R²=0.378, AUC=0.903)
 - **Section 7.1**: HAR-RV baseline; GARCH order selection — AR(1)-GARCH(2,1)-t wins (BIC=55488.7)
@@ -56,7 +56,7 @@ Team: Yun, Eric, Neeraj (+ others)
 ## ✅ Completed (2026-03-17 session 1)
 
 - [x] **Re-run `data_cleaning.ipynb`** — Done. Rebuilt all parquets with 5-point RTM std. DST cell fails harmlessly (pre-existing; run with `--allow-errors`).
-- [x] **Re-run `eda.ipynb` end-to-end** — Done. Rebuilt features (56,928/17,544 rows, 31 features) + all models + all PNGs.
+- [x] **Re-run `analysis.ipynb` end-to-end** — Done. Rebuilt features (56,928/17,544 rows, 31 features) + all models + all PNGs.
 - [x] **Section 7.5 results recorded** — Winner: 2021–2023 post-Uri (R²=0.405, old split). Saved as `model_xgb_reg_v3_best.pkl`.
 - [x] **Section 8 outputs confirmed** — MAE plots, leaderboard, PR-AUC=0.273, bootstrap CI printed correctly.
 
@@ -67,7 +67,7 @@ Team: Yun, Eric, Neeraj (+ others)
 - [x] **Fixed leap-year bug** — `fold_val_end` now uses `pd.Timestamp(f'{fold_name}-12-31 23:00')` instead of `+Timedelta(days=365)`.
 - [x] **Changed rolling Lasso to 4-year windows** — 5 windows (2017-2020 → 2021-2024, step=1yr). Updated comment and plot title from "3-year" to "4-year".
 - [x] **Audited all pipeline/date leakage issues** — 7 issues found and fixed; no structural leakage in final notebook.
-- [x] **Re-run `eda.ipynb` with clean split** — Done (2026-03-18). train≤2024, test=2025. XGB v3 best R²=0.475 (2021–2024 post-Uri window).
+- [x] **Re-run `analysis.ipynb` with clean split** — Done (2026-03-18). train≤2024, test=2025. XGB v3 best R²=0.475 (2021–2024 post-Uri window).
 
 ## ✅ Completed (2026-03-18 session 3)
 
@@ -106,20 +106,20 @@ Team: Yun, Eric, Neeraj (+ others)
 - [x] **Per-dataset compressed archives** — `compressed/raw_<DS>_202602.tar.gz` (9 files); replaced old `processed_ercot_2026-03-16.tar.gz`
 - [x] **Fixed `KeyError: 'OperDay'` in Cell 10** — `_dst_detail()` now checks `date_col not in df.columns` after concat; prints `[SKIP]` and returns gracefully
 - [x] **data_cleaning.ipynb runs clean** — verified end-to-end with no errors
-- [x] **eda.ipynb runs clean** — verified end-to-end with no errors in any cell
+- [x] **analysis.ipynb runs clean** — verified end-to-end with no errors in any cell
 
 ## ✅ Completed (2026-03-19 session 6)
 
-- [x] **Swapped wind features to Houston-specific** — replaced `wgrpp_system_wide`/`wind_error_system`/`np4_732_wind_system` with `wgrpp_lz_south_houston`/`wind_error_houston`/`np4_732_wind_houston` across all 10 affected cells in `eda.ipynb` (`vv567ec2vqn`, `bg2hicyxe48`, `5qwqlafwv7`, `cdelxch0xcn`, `zqsinbn9kv`, `rnii199t7eo`, `oe8x9u81b9b`, `eda-wind-error`, `eda-uri`, `hvtm7kf7wu5`)
+- [x] **Swapped wind features to Houston-specific** — replaced `wgrpp_system_wide`/`wind_error_system`/`np4_732_wind_system` with `wgrpp_lz_south_houston`/`wind_error_houston`/`np4_732_wind_houston` across all 10 affected cells in `analysis.ipynb` (`vv567ec2vqn`, `bg2hicyxe48`, `5qwqlafwv7`, `cdelxch0xcn`, `zqsinbn9kv`, `rnii199t7eo`, `oe8x9u81b9b`, `eda-wind-error`, `eda-uri`, `hvtm7kf7wu5`)
 - [x] **Updated markdown cells** — `eda-s3-2-hdr`, `vcl13m4b3hn`, `2k0lwjbibru`, `eda-s5-2-plan`, `9uhfq09mjk` (Feature Dictionary), `eda-corr-summary`
 - [x] **Added `wgrpp_lz_south_houston` to `ercot_combined` merge** — `data_cleaning.ipynb` cell `s05-merge-code` updated
 - [x] **Fixed 5 cells with partial content** — cells were saved as partial lines in previous session; restored from HEAD and applied correct substitutions
-- [x] **All 39 code cells pass syntax check** — zero remaining system-wide wind references in `eda.ipynb`
+- [x] **All 39 code cells pass syntax check** — zero remaining system-wide wind references in `analysis.ipynb`
 - [x] **Rebuilt parquets and re-ran all models** — `ercot_combined` already rebuilt (Mar 18 23:45 run); `train/test/all_features.parquet` rebuilt with `wgrpp_lz_south_houston`/`wind_error_houston`, `temp_f_texas_avg` dropped
 - [x] **Fixed FEAT_V3 ordering bug (Sections 8 & 9)** — Section 7.5 redefines `FEAT_V2/FEAT_V3` from DataFrame column order; pkl models have different feature ordering. Fix: `FEAT_V3 = list(m_v3.get_booster().feature_names)` after loading pkl. Applied to `lsctyepdxx` (Sec 8) and `s9_1code0001` (Sec 9.1).
 - [x] **Extended bootstrap CI (Section 8.3, cell `6fjl1b32fne`)** — block bootstrap (block=24h, 2000 iterations): R²=0.484 [0.459, 0.508]; MAE=3.773 [3.053, 4.349] $/MWh; paired Δ R²=+0.130 [+0.106, +0.152], p<0.001. Also covers AUC/PR-AUC CIs. Saved `bootstrap_ci.png`.
 - [x] **Updated all stale markdown cells** — Section 7.3, Section 7.5, Conclusion with fresh numbers (v3 R²=0.484, v3 best R²=0.489, RMSE=0.610, classifier AUC=0.969/PR-AUC=0.495/F1=0.506)
-- [x] **Full eda.ipynb clean run** — 0 errors across all 39 code cells (Mar 19 03:49 run)
+- [x] **Full analysis.ipynb clean run** — 0 errors across all 39 code cells (Mar 19 03:49 run)
 
 ---
 
@@ -164,7 +164,7 @@ Team: Yun, Eric, Neeraj (+ others)
 ## Collaboration Notes
 
 - **Data**: local only (gitignored) — use `processed_ercot_2026-03-16.tar.gz` to share; extract into `data/processed/`
-- **Notebooks**: `data_cleaning.ipynb` builds parquets; `eda.ipynb` has all analysis and models
-- **Run order**: restart kernel, run `eda.ipynb` top-to-bottom; Section 7.3 must run before 7.4/7.5/8/9; Section 9 is memory-intensive — if kernel crashes at Sec 9.2, run drift scripts standalone in `/tmp/`
+- **Notebooks**: `data_cleaning.ipynb` builds parquets; `analysis.ipynb` has all analysis and models
+- **Run order**: restart kernel, run `analysis.ipynb` top-to-bottom; Section 7.3 must run before 7.4/7.5/8/9; Section 9 is memory-intensive — if kernel crashes at Sec 9.2, run drift scripts standalone in `/tmp/`
 - **conda env**: `erdos_ds_environment` — run `conda run -n erdos_ds_environment pip install arch` if missing
 - **Train/test split**: Train ≤2024-12-31 | Test 2025 | Hold-out 2026

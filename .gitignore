@@ -17,4 +17,5 @@ logs/
 .vscode/
 *.xlsx
 compressed/
-rolling_lasso_heatmap.png
+figures/
+analysis.ipynb

@@ -1,5 +1,5 @@
 # Project To-Do List
-_Last updated: 2026-03-18 (session 4)_
+_Last updated: 2026-03-18 (session 5)_
 
 Team: Yun, Eric, Neeraj (+ others)
 
@@ -96,6 +96,17 @@ Team: Yun, Eric, Neeraj (+ others)
 - [x] **Added XGBoost classifier v3** — added to Section 7.3 (`zqsinbn9kv`) using `FEAT_V3` (30 feats incl. `garch_cond_vol`). Section 8 (`lsctyepdxx`) updated to load `model_xgb_clf_v3.pkl` and use FEAT_V3.
 - [x] **Fixed SPIKE_THRESHOLD inconsistency** — `SPIKE_THRESHOLD = 500` in eda-imports is EDA-only (clarified with comment); Section 5.2 plan table now explicitly says `> $100/MWh` instead of `> SPIKE_THRESHOLD`. Model's `spike_flag = (rtm_price_mean > 100)` is unambiguous.
 - [x] **Feature count consistency pass** — updated all "23/30/31 features" references to "22/29/30" across 23 cells total. Lasso zeros-out count updated: 23/30 → 24/29 (5 survivors unchanged).
+
+## ✅ Completed (2026-03-18 session 5)
+
+- [x] **Removed git-lfs** — `git lfs uninstall`; no `.gitattributes`; all data gitignored via `/data/`
+- [x] **Re-downloaded NP6-346-CD** — 3,105 source docs → 103 real monthly CSVs (replaced LFS pointer stubs); per-doc sources archived to `data/archive/ercot/NP6-346-CD/`
+- [x] **Added `scripts/archive_raw_sources.py`** — moves per-doc source files to archive after download; keeps monthly CSVs in raw/
+- [x] **Updated all datasets to March 2026** — downloaded March 2026 docs for all 9 active datasets; Feb 2026 verified complete for all
+- [x] **Per-dataset compressed archives** — `compressed/raw_<DS>_202602.tar.gz` (9 files); replaced old `processed_ercot_2026-03-16.tar.gz`
+- [x] **Fixed `KeyError: 'OperDay'` in Cell 10** — `_dst_detail()` now checks `date_col not in df.columns` after concat; prints `[SKIP]` and returns gracefully
+- [x] **data_cleaning.ipynb runs clean** — verified end-to-end with no errors
+- [x] **eda.ipynb runs clean** — verified end-to-end with no errors in any cell
 
 ---
 

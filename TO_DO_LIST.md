@@ -1,5 +1,5 @@
 # Project To-Do List
-_Last updated: 2026-03-18 (session 5)_
+_Last updated: 2026-03-19 (session 6)_
 
 Team: Yun, Eric, Neeraj (+ others)
 
@@ -108,12 +108,21 @@ Team: Yun, Eric, Neeraj (+ others)
 - [x] **data_cleaning.ipynb runs clean** — verified end-to-end with no errors
 - [x] **eda.ipynb runs clean** — verified end-to-end with no errors in any cell
 
+## ✅ Completed (2026-03-19 session 6)
+
+- [x] **Swapped wind features to Houston-specific** — replaced `wgrpp_system_wide`/`wind_error_system`/`np4_732_wind_system` with `wgrpp_lz_south_houston`/`wind_error_houston`/`np4_732_wind_houston` across all 10 affected cells in `eda.ipynb` (`vv567ec2vqn`, `bg2hicyxe48`, `5qwqlafwv7`, `cdelxch0xcn`, `zqsinbn9kv`, `rnii199t7eo`, `oe8x9u81b9b`, `eda-wind-error`, `eda-uri`, `hvtm7kf7wu5`)
+- [x] **Updated markdown cells** — `eda-s3-2-hdr`, `vcl13m4b3hn`, `2k0lwjbibru`, `eda-s5-2-plan`, `9uhfq09mjk` (Feature Dictionary), `eda-corr-summary`
+- [x] **Added `wgrpp_lz_south_houston` to `ercot_combined` merge** — `data_cleaning.ipynb` cell `s05-merge-code` updated
+- [x] **Fixed 5 cells with partial content** — cells were saved as partial lines in previous session; restored from HEAD and applied correct substitutions
+- [x] **All 39 code cells pass syntax check** — zero remaining system-wide wind references in `eda.ipynb`
+
 ---
 
 ## ⚠️ Rebuild Required (next session)
 
-- [ ] **Rebuild parquets and re-run models** — required after Houston-only weather change:
-  - Rebuild `train_features.parquet`, `test_features.parquet`, `all_features.parquet` (drop `temp_f_texas_avg` column)
+- [ ] **Rebuild parquets and re-run models** — required after Houston-only wind + weather changes:
+  - Rebuild `ercot_combined.parquet` (added `wgrpp_lz_south_houston` to merge)
+  - Rebuild `train_features.parquet`, `test_features.parquet`, `all_features.parquet` (drop `temp_f_texas_avg`; swap to `wgrpp_lz_south_houston`/`wind_error_houston`)
   - Retrain all models: v2 reg, v2 clf, v3 reg, v3 clf, Section 7.5 best window, rolling Lasso, Section 9
   - Update all output metrics in markdown cells after retraining
 

@@ -1,5 +1,5 @@
 # Project To-Do List
-_Last updated: 2026-03-19 (session 6)_
+_Last updated: 2026-03-19 (session 6 continued)_
 
 Team: Yun, Eric, Neeraj (+ others)
 
@@ -115,16 +115,11 @@ Team: Yun, Eric, Neeraj (+ others)
 - [x] **Added `wgrpp_lz_south_houston` to `ercot_combined` merge** — `data_cleaning.ipynb` cell `s05-merge-code` updated
 - [x] **Fixed 5 cells with partial content** — cells were saved as partial lines in previous session; restored from HEAD and applied correct substitutions
 - [x] **All 39 code cells pass syntax check** — zero remaining system-wide wind references in `eda.ipynb`
-
----
-
-## ⚠️ Rebuild Required (next session)
-
-- [ ] **Rebuild parquets and re-run models** — required after Houston-only wind + weather changes:
-  - Rebuild `ercot_combined.parquet` (added `wgrpp_lz_south_houston` to merge)
-  - Rebuild `train_features.parquet`, `test_features.parquet`, `all_features.parquet` (drop `temp_f_texas_avg`; swap to `wgrpp_lz_south_houston`/`wind_error_houston`)
-  - Retrain all models: v2 reg, v2 clf, v3 reg, v3 clf, Section 7.5 best window, rolling Lasso, Section 9
-  - Update all output metrics in markdown cells after retraining
+- [x] **Rebuilt parquets and re-ran all models** — `ercot_combined` already rebuilt (Mar 18 23:45 run); `train/test/all_features.parquet` rebuilt with `wgrpp_lz_south_houston`/`wind_error_houston`, `temp_f_texas_avg` dropped
+- [x] **Fixed FEAT_V3 ordering bug (Sections 8 & 9)** — Section 7.5 redefines `FEAT_V2/FEAT_V3` from DataFrame column order; pkl models have different feature ordering. Fix: `FEAT_V3 = list(m_v3.get_booster().feature_names)` after loading pkl. Applied to `lsctyepdxx` (Sec 8) and `s9_1code0001` (Sec 9.1).
+- [x] **Extended bootstrap CI (Section 8.3, cell `6fjl1b32fne`)** — block bootstrap (block=24h, 2000 iterations): R²=0.484 [0.459, 0.508]; MAE=3.773 [3.053, 4.349] $/MWh; paired Δ R²=+0.130 [+0.106, +0.152], p<0.001. Also covers AUC/PR-AUC CIs. Saved `bootstrap_ci.png`.
+- [x] **Updated all stale markdown cells** — Section 7.3, Section 7.5, Conclusion with fresh numbers (v3 R²=0.484, v3 best R²=0.489, RMSE=0.610, classifier AUC=0.969/PR-AUC=0.495/F1=0.506)
+- [x] **Full eda.ipynb clean run** — 0 errors across all 39 code cells (Mar 19 03:49 run)
 
 ---
 

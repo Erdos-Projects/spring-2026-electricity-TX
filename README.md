@@ -1,110 +1,156 @@
 # spring-2026-electricity-TX
 
-Repository for downloading, organizing, and analyzing ERCOT electricity data for Texas.
+ERCOT electricity price volatility forecasting for the Texas Houston Hub.
+**Goal:** predict intra-hour RTM price volatility (`log(rtm_price_std)`) and flag price spikes (>$100/MWh) using day-ahead features available at midnight CST.
 
-## Quick Doc Routing
+**Status:** Modeling complete. Best model: XGBoost v3, R²=0.489, RMSE=0.610 (test 2025).
+Remaining: presentation notebook.
 
-- Run and troubleshoot downloads: `DATA_DOWNLOAD.md`
-- Plan what to download, expected size, and expected time: `DATA_ESTIMATION.md`
-- Volatility clustering model analysis plan: `MODEL_ANALYSIS.md`
-- Task list and project status: `TO_DO_LIST.md`
+---
 
-## Current Data Inventory (as of 2026-02-27)
+## Project Directory
 
-13 datasets downloaded, ~89 GB total on disk.
+### Notebooks (run in this order)
 
-| Dataset ID | Type | Monthly CSVs | Raw Size | Notes |
-|---|---|---:|---|---|
-| `NP6-346-CD` | Load (actual, forecast zone) | 104 | 7.3M | postDateTime 100% |
-| `NP6-345-CD` | Load (actual, weather zone) | 142 | 13M | from 2014-05 |
-| `NP3-565-CD` | Load forecast | 104 | 13G | postDateTime 100% |
-| `NP4-732-CD` | Wind actual/forecast | 104 | 2.0G | |
-| `NP4-745-CD` | Solar actual/forecast | 45 | 959M | from 2022-06 |
-| `NP6-905-CD` | RT settlement prices (15-min) | 104 | 14G | postDateTime 100% |
-| `NP6-788-CD` | RT LMPs (per-SCED) | 25 | 14G | download in progress |
-| `NP4-190-CD` | DA settlement prices | 142 | 5.0G | from 2014-05 |
-| `NP4-523-CD` | DA system lambda | 104 | 4.7M | |
-| `NP4-188-CD` | DA ancillary prices | 104 | 18M | |
-| `NP6-331-CD` | RT ancillary prices | 3 | 2.0M | from 2025-12 |
-| `NP3-233-CD` | Outage capacity | 104 | 989M | postDateTime 100% |
-| `NP3-911-ER` | ~~2-Day DAM AS reports~~ | 104 | 49M | **Excluded from analysis** — schema changed 4× across 2017–2025 (RRS cleared → REGUP offer curves → NSPNM self-arranged → NSPNM offer curves). Use `NP4-188-CD` instead. |
+| Notebook | Purpose | Sections |
+|---|---|---|
+| `data_cleaning.ipynb` | Raw ERCOT CSVs → processed parquets | §1 Setup · §2 Dataset Inventory · §3 Load & Clean · §4 Validation · §5 Build Processed Data · §6 Save Outputs |
+| `eda.ipynb` | EDA, feature engineering, leakage-safe design | §1 Setup · §2 Target Variable · §3 Feature EDA · §4 Regime Analysis · §5 Modeling Roadmap · Appendix A–B |
+| `modeling.ipynb` | Baseline through XGBoost v3, error analysis, drift detection | §6 Baseline · §7 Model Improvements · §8 Error Analysis · §9 Rolling Forecast & Drift · §10 Ensemble |
 
-Storage breakdown: raw 50G, archive 30G, compressed 8.4G, sample 725M.
+> `modeling.ipynb` sections start at §6 (continuation from `eda.ipynb` §5).
 
-## Documentation Map
+### Documentation (`docs/`)
 
-- `DATA_DOWNLOAD.md` — Full download runbook: setup, credentials, canonical commands, structured logs, DNS troubleshooting, postDateTime backfill. Note: Git LFS has been removed; all data is gitignored.
-- `DATA_ESTIMATION.md` — Dataset-selection planning: coverage snapshot, time estimates from run logs, actual downloaded sizes.
-- `MODEL_ANALYSIS.md` — Volatility clustering analysis: model selection (GARCH, regime-switching, HAR-RV, ML), EDA roadmap, benchmark design, evaluation framework.
-- `TO_DO_LIST.md` — Team task list: completed work, immediate priorities, code fixes, collaboration notes.
-- `GIT_TERMINAL.md` — Beginner Git guide: fetch/pull, stage, commit, push, merge, conflict resolution.
-- `config/download.sample.yaml` — Starter config. Copy to `config/download.yaml` for local use: `mkdir -p config && cp config/download.sample.yaml config/download.yaml`
-
-## Core Scripts
-
-| Script | Purpose |
+| File | Purpose |
 |---|---|
-| `scripts/download_ercot_public_reports.py` | Main ERCOT API downloader with checkpoint resume, bulk download, structured event logging, and tqdm progress bars. |
-| `scripts/backfill_post_datetime.py` | Backfill `postDateTime` into monthly CSVs. Supports add-missing/rebuild modes, verify, source cleanup/archive. |
-| `scripts/sort_csv.py` | Re-sort existing monthly CSVs without API calls. |
-| `scripts/audit_post_datetime_quality.py` | Audit postDateTime fill rate across monthly CSVs. |
-| `scripts/ercot_dataset_catalog.py` | Central dataset catalog and profile definitions. |
-| `scripts/list_ercot_analysis_datasets.py` | Print recommended dataset IDs by analysis profile. |
-| `scripts/show_resume_status.py` | Display download checkpoint/resume status. |
-| `scripts/estimate_download_time.py` | Estimate download time from structured logs. |
-| `scripts/estimate_dataset_size.py` | Estimate dataset storage from local files. |
-| `scripts/check_api_earliest_and_size_estimate.py` | Query ERCOT API for dataset earliest date and doc count. |
+| `docs/DATA_DOWNLOAD.md` | Full download runbook: setup, credentials, commands, postDateTime backfill |
+| `docs/DATA_ESTIMATION.md` | Dataset-selection planning: coverage, sizes, time estimates |
+| `docs/MODEL_ANALYSIS.md` | Volatility analysis plan: model hierarchy, benchmark design, evaluation framework |
+| `docs/houston_weather_USAGE.md` | Weather data fetcher (Open-Meteo API): modes, station registry, examples |
+| `docs/GIT_TERMINAL.md` | Beginner Git guide: daily pipeline, conflict resolution, PR workflow |
 
-Notebooks (root directory):
-- `data_cleaning.ipynb` — Data cleaning exploration
-- `eda.ipynb` — Exploratory data analysis
-- `dataexploration_neeraj.ipynb` — EDA (Neeraj)
-- `playing_with_sample_data.ipynb` — Sample data exploration
+### Key Supporting Files
 
-Legacy script (root): `ercot_batch_downloader.py` — superseded by `scripts/download_ercot_public_reports.py`.
+| File | Purpose |
+|---|---|
+| `TO_DO_LIST.md` | Task tracker: completed, in-progress, pending |
+| `config/download.sample.yaml` | Starter config — copy to `config/download.yaml` for local use |
+| `scripts/` | Download, backfill, audit, and utility scripts (see Scripts section) |
+| `figures/` | All saved plots, organized by notebook (`figures/data_cleaning/`, `figures/eda/`, `figures/modeling/`) |
+| `compressed/processed_ercot_2026-03-20.tar.gz` | Processed parquets snapshot — extract to skip `data_cleaning.ipynb` |
 
-## Typical Workflow
+---
 
-1. Choose datasets for your task:
-   - Use `scripts/list_ercot_analysis_datasets.py`, `DATA_DOWNLOAD.md` (dataset selection and run commands), and `DATA_ESTIMATION.md` (size/time planning).
-   - Optionally run `python3 scripts/estimate_download_time.py` and `python3 scripts/estimate_dataset_size.py` to refresh local planning snapshots.
-2. Download raw data:
-   - Follow `DATA_DOWNLOAD.md` and run scripts directly via `python3`.
-   - Use `python3 scripts/download_ercot_public_reports.py` for downloads, `python3 scripts/backfill_post_datetime.py` for backfill.
-   - Use `python3 scripts/sort_csv.py` only when you want to re-sort existing local monthly CSVs without re-downloading.
-3. Clean and process raw data:
-   - Run `data_cleaning.ipynb` to build processed parquets in `data/processed/ercot/`.
-   - Or extract `compressed/processed_ercot_2026-03-16.tar.gz` directly into `data/processed/`.
-4. Run EDA and models:
-   - Run `eda.ipynb` top-to-bottom (restart kernel first). Sections 1–5 are EDA; 6–8 are models.
+## Quick Start
 
-## Collaboration Workflow
+```bash
+# 1. Extract processed data (skip data_cleaning.ipynb if you have the tarball)
+tar -xzf compressed/processed_ercot_2026-03-20.tar.gz -C data/processed/
 
-For all Git-related operations, use `GIT_TERMINAL.md`:
-- branch creation and naming
-- fetch/pull/rebase choices
-- staging, commit, push
-- pull request and merge workflow
-- conflict resolution
+# 2. Activate conda environment
+conda activate erdos_ds_environment
+
+# 3. Run notebooks in order
+jupyter notebook eda.ipynb        # reads from data/processed/ercot/
+jupyter notebook modeling.ipynb   # reads train/test_features.parquet
+```
+
+To download raw data from scratch: see `docs/DATA_DOWNLOAD.md`.
+
+---
 
 ## Data Layout
 
-- Raw downloads:
-  - `data/raw/ercot/<DATASET_ID>/<YYYY>/<MM>/...`
-  - Monthly CSVs: `<DATASET_ID>_<YYYYMM>.csv`
-  - Sidecar files: `.docids` (dedup), `.sortcache.json` (sort state)
-- Archived source files:
-  - `data/archive/ercot/<DATASET_ID>/...`
-- Compressed snapshots:
-  - `compressed/` (gitignored)
-- Sample data:
-  - `data/sample/`
-- Processed outputs:
-  - `data/processed/ercot/` (gitignored — share via `compressed/processed_ercot_2026-03-16.tar.gz`)
-- Run artifacts:
-  - `logs/downloads/<YYYYMMDD_HHMMSS>/run.log`
-  - `logs/downloads/<YYYYMMDD_HHMMSS>/failures.csv`
-  - `logs/downloads/<YYYYMMDD_HHMMSS>/summary.json`
-- Resume checkpoints:
-  - `state/<DATASET_ID>.json`
-  - `state/<DATASET_ID>.archive_docs.jsonl`
+```
+data/
+├── raw/ercot/<DATASET>/<YYYY>/<MM>/      # Raw monthly CSVs + sidecar files
+├── archive/ercot/<DATASET>/              # Per-doc source files (post backfill)
+├── processed/ercot/                      # Parquets (gitignored — use compressed/)
+└── sample/                               # Small sample files for dev/testing
+
+compressed/
+├── processed_ercot_2026-03-20.tar.gz     # All processed parquets (73 MB)
+└── raw_<DS>_202602.tar.gz                # Raw monthly CSVs per dataset (9 files)
+
+figures/
+├── data_cleaning/                        # Plots from data_cleaning.ipynb
+├── eda/                                  # Plots from eda.ipynb
+└── modeling/                             # Plots from modeling.ipynb
+
+docs/                                     # Project documentation
+scripts/                                  # Python utility scripts
+archive/                                  # Legacy exploration notebooks
+state/                                    # Download checkpoints (<DATASET>.json)
+logs/                                     # Download and backfill logs
+```
+
+---
+
+## Datasets (Analysis Window: 2017-07-01 → 2025-12-31)
+
+| Dataset | Content | Granularity | Model Role |
+|---|---|---|---|
+| `NP6-346-CD` | Actual load — Houston + 3 zones | Hourly | `load_houston_lag48` (D-2 lag) |
+| `NP6-345-CD` | Actual load — 8 weather zones | Hourly | `fc_coast` proxy |
+| `NP3-565-CD` | Load forecast | Hourly | `fc_coast`, `fc_system_total` |
+| `NP6-905-CD` | RTM settlement prices (15-min→hourly) | 15-min | Target + `rtm_*_lag48` |
+| `NP4-732-CD` | Wind actual + forecast | Hourly | `wgrpp_lz_south_houston`, `wf_stwpf` |
+| `NP4-190-CD` | DAM settlement prices | Hourly | `dam_price_houston` (top feature) |
+| `NP4-523-CD` | DAM system lambda | Hourly | `system_lambda` |
+| `NP4-188-CD` | DAM ancillary MCPC prices | Hourly | `mcpc_regup/rrs/nspin/regdn` |
+| `NP3-233-CD` | Outage capacity | Hourly | `total_resource_mw` |
+| Weather | Houston + Texas stations (Open-Meteo) | Hourly | 4 Houston weather features |
+| `NP4-745-CD` | Solar actual/forecast | Hourly | **Excluded** — starts 2022-06 |
+| `NP6-331-CD` | RT ancillary prices | Hourly | **Excluded** — only 3 months |
+| `NP3-911-ER` | 2-Day DAM AS reports | Hourly | **Excluded** — schema changed 4× |
+
+**Prediction cutoff:** midnight CST (00:00 D). DAM/lambda/ancillary are available at cutoff (posted ~12:35 CST D-1). Load/RTM/wind actuals require a D-2 lag (they post after midnight).
+
+---
+
+## Model Results
+
+| Model | Train Window | R² (test 2025) | RMSE |
+|---|---|---|---|
+| Ridge v1 (22 features) | 2017–2024 | 0.243 | 0.740 |
+| XGBoost v2 (29 features) | 2017–2024 | 0.359 | 0.683 |
+| **XGBoost v3 (30 feat, best window)** | **2021–2024** | **0.489** | **0.610** |
+| XGBoost v3 (full train) | 2017–2024 | 0.484 | 0.613 |
+| Spike classifier | 2021–2024 | AUC=0.969, F1=0.506 | — |
+
+Top features: `dam_price_houston` (26.9%), `garch_cond_vol` (21.5%).
+Bootstrap CI (block=24h, 2000 iters): R² [0.459, 0.508].
+
+**Train/Test/Hold-out split:**
+- Train: 2017-07-04 → 2024-12-31 (65,712 hours)
+- Test: 2025-01-01 → 2025-12-31 (8,760 hours) — clean holdout, never used for model selection
+- Hold-out: 2026 — reserved; do not touch until model is locked
+
+---
+
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/download_ercot_public_reports.py` | Main ERCOT API downloader (checkpoint resume, bulk download, tqdm) |
+| `scripts/backfill_post_datetime.py` | Backfill `postDateTime` into monthly CSVs |
+| `scripts/archive_raw_sources.py` | Move per-doc source files to archive after download |
+| `scripts/weather_data_processing.py` | Process raw weather station CSVs → hourly/daily parquets |
+| `scripts/houston_weather.py` / `tx_stations.py` | Fetch weather data from Open-Meteo API + station registry |
+| `scripts/sort_csv.py` | Re-sort monthly CSVs without API calls |
+| `scripts/audit_post_datetime_quality.py` | Audit postDateTime fill rate across monthly CSVs |
+| `scripts/ercot_dataset_catalog.py` | Central dataset catalog and profile definitions |
+| `scripts/list_ercot_analysis_datasets.py` | Print recommended dataset IDs by analysis profile |
+| `scripts/show_resume_status.py` | Display download checkpoint/resume status |
+
+Legacy one-off scripts: `scripts/archive/` (10 files — horizon analysis, size estimators, one-off fixes).
+
+---
+
+## Collaboration
+
+- All data is local and gitignored (`/data/`). Share processed data via `compressed/processed_ercot_2026-03-20.tar.gz`.
+- Git workflow: see `docs/GIT_TERMINAL.md`.
+- Environment: `conda activate erdos_ds_environment` (Python 3.12, arch, xgboost, sklearn, matplotlib, seaborn).
+- Figures are gitignored. Each notebook saves to `figures/<notebook>/` and auto-creates the subfolder at run time.

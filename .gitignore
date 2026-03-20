@@ -11,11 +11,11 @@ LOCAL_DOWNLOAD_NOTES.md
 CLAUDE.md
 WORKLOG.md
 agent_notes/
+.claude/
 config/download.yaml
 state/
 logs/
 .vscode/
 *.xlsx
 compressed/
-figures/
-analysis.ipynb
+archive/analysis.ipynb

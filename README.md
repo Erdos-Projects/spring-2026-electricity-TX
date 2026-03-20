@@ -45,15 +45,18 @@ Remaining: presentation notebook.
 ## Quick Start
 
 ```bash
-# 1. Extract processed data (skip data_cleaning.ipynb if you have the tarball)
-tar -xzf compressed/processed_ercot_2026-03-20.tar.gz -C data/processed/
+# 1. Extract processed data into the correct directory
+#    This includes train_features.parquet and test_features.parquet —
+#    you can skip eda.ipynb's slow parquet-building step (cell hvtm7kf7wu5).
+mkdir -p data/processed/ercot
+tar -xzf compressed/processed_ercot_2026-03-20.tar.gz -C data/processed/ercot/
 
 # 2. Activate conda environment
 conda activate erdos_ds_environment
 
 # 3. Run notebooks in order
-jupyter notebook eda.ipynb        # reads from data/processed/ercot/
-jupyter notebook modeling.ipynb   # reads train/test_features.parquet
+jupyter notebook eda.ipynb        # EDA and feature engineering (parquet build optional if tarball extracted)
+jupyter notebook modeling.ipynb   # reads train/test_features.parquet from data/processed/ercot/
 ```
 
 To download raw data from scratch: see `docs/DATA_DOWNLOAD.md`.

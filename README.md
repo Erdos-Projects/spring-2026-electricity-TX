@@ -117,12 +117,12 @@ logs/                                     # Download and backfill logs
 | Model | Train Window | R² (test 2025) | RMSE |
 |---|---|---|---|
 | Ridge v1 (22 features) | 2017–2024 | 0.243 | 0.740 |
-| XGBoost v2 (29 features) | 2017–2024 | 0.359 | 0.683 |
-| **XGBoost v3 (30 feat, best window)** | **2021–2024** | **0.489** | **0.610** |
-| XGBoost v3 (full train) | 2017–2024 | 0.484 | 0.613 |
+| XGBoost v2 (30 features) | 2017–2024 | 0.353 | 0.687 |
+| **XGBoost v3 (31 feat, best window)** | **2021–2024** | **0.494** | **0.607** |
+| XGBoost v3 (full train) | 2017–2024 | 0.485 | 0.612 |
 | Spike classifier | 2021–2024 | AUC=0.969, F1=0.506 | — |
 
-Top features: `dam_price_houston` (26.9%), `garch_cond_vol` (21.5%).
+Top features: `garch_cond_vol` (25.5%), `dam_price_houston` (15.0%), `abs_dam_rtm_spread` (4.2%).
 Bootstrap CI (block=24h, 2000 iters): R² [0.459, 0.508].
 
 **Train/Test/Hold-out split:**

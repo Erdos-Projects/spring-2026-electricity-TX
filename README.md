@@ -3,8 +3,7 @@
 ERCOT electricity price volatility forecasting for the Texas Houston Hub.
 **Goal:** predict intra-hour RTM price volatility (`log(rtm_price_std)`) and flag price spikes (>$100/MWh) using day-ahead features available at midnight CST.
 
-**Status:** Modeling complete. Best model: XGBoost v3, R²=0.489, RMSE=0.610 (test 2025).
-Remaining: presentation notebook.
+**Status:** Modeling and presentation complete. Final model: XGBoost v3 tuned (31 features, +GARCH D-1 lag, post-Uri 2021–2024 window). Test R²=0.399, RMSE=0.662, MAE=4.02 $/MWh (2025 holdout). Spike classifier: PR-AUC=0.231, F1=0.316.
 
 ---
 
@@ -108,22 +107,39 @@ logs/                                     # Download and backfill logs
 | `NP6-331-CD` | RT ancillary prices | Hourly | **Excluded** — only 3 months |
 | `NP3-911-ER` | 2-Day DAM AS reports | Hourly | **Excluded** — schema changed 4× |
 
-**Prediction cutoff:** midnight CST (00:00 D). DAM/lambda/ancillary are available at cutoff (posted ~12:35 CST D-1). Load/RTM/wind actuals require a D-2 lag (they post after midnight).
+**Prediction cutoff:** 00:05 CST (D). DAM/lambda/ancillary available (posted ~12:35 CST D-1). RTM available as D-1 lag (last interval posts ~00:02 CST D). Load/wind actuals require D-2 lag (post ~05:50/00:31 CST D, after cutoff).
 
 ---
 
 ## Model Results
 
-| Model | Train Window | R² (test 2025) | RMSE |
-|---|---|---|---|
-| Ridge v1 (22 features) | 2017–2024 | 0.243 | 0.740 |
-| XGBoost v2 (30 features) | 2017–2024 | 0.353 | 0.687 |
-| **XGBoost v3 (31 feat, best window)** | **2021–2024** | **0.494** | **0.607** |
-| XGBoost v3 (full train) | 2017–2024 | 0.485 | 0.612 |
-| Spike classifier | 2021–2024 | AUC=0.969, F1=0.506 | — |
+Model selection uses **walk-forward CV R²** (val folds 2022/2023/2024). Test set (2025) used only for final reporting on the selected model.
 
-Top features: `garch_cond_vol` (25.5%), `dam_price_houston` (15.0%), `abs_dam_rtm_spread` (4.2%).
-Bootstrap CI (block=24h, 2000 iters): R² [0.459, 0.508].
+> **Metric note:** AUC-ROC is omitted for the spike classifier. At a 2.2% spike rate, a trivial always-negative classifier scores AUC≈0.98 — meaningless. We use PR-AUC and F1 at optimal threshold instead.
+
+**Final model: XGBoost v3 tuned (31 features, +GARCH D-1 lag, post-Uri 2021–2024 window)**
+
+### Volatility Regression
+
+| Model | Features | Train Window | CV R² | Test R² | RMSE (log) | MAE ($/MWh) | Selection |
+|---|---|---|---|---|---|---|---|
+| Ridge v1 | 22 | 2017–2024 | — | 0.243 | 0.740 | — | ✗ |
+| HAR-Ridge | 3 | 2017–2024 | 0.108 | 0.119 | — | — | ✗ |
+| Full-Ridge (29 feat) | 29 | 2017–2024 | 0.145 | 0.167 | — | — | ✗ |
+| XGBoost v2 | 29 | 2017–2024 | — | 0.369 | 0.678 | 4.10 | ✗ |
+| XGBoost v3 (orig params) | 31 | 2017–2024 | 0.286 | 0.376 | 0.674 | 4.08 | ✗ |
+| XGBoost v3 tuned (full train) | 31 | 2017–2024 | 0.311 | 0.386 | 0.669 | 4.03 | ✗ |
+| **XGBoost v3 tuned (post-Uri)** | **31** | **2021–2024** | **0.311** | **0.399** | **0.662** | **4.02** | **✅ FINAL** |
+
+### Spike Classifier
+
+| Model | Features | PR-AUC | F1 | Threshold |
+|---|---|---|---|---|
+| XGB Clf v1 | 22 | 0.214 | 0.321 | 0.251 |
+| XGB Clf v2 | 29 | 0.225 | 0.289 | 0.471 |
+| **XGB Clf v3** | **31** | **0.231** | **0.316** | **0.343** |
+
+Top features (v3 tuned): GARCH conditional vol (~25%), Houston Hub Day-Ahead price (~15%), absolute DAM–RTM spread (~4%).
 
 **Train/Test/Hold-out split:**
 - Train: 2017-07-04 → 2024-12-31 (65,712 hours)

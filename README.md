@@ -3,7 +3,7 @@
 ERCOT electricity price volatility forecasting for the Texas Houston Hub.
 **Goal:** predict intra-hour RTM price volatility (`log(rtm_price_std)`) and flag price spikes (>$100/MWh) using day-ahead features available at midnight CST.
 
-**Status:** Complete. Final regression model: XGBoost v3 tuned (31 features, +GARCH D-1 lag, post-Uri 2021–2024 window). Test R²=0.386, RMSE=0.669, MAE=4.027 $/MWh (2025 holdout). Final spike classifier: XGB Clf v3, PR-AUC=0.237, F1=0.329.
+**Status:** Complete. Final regression model: XGBoost v3 tuned (31 features, +GARCH D-1 lag, post-Uri 2021–2024 window). Test R²=0.386, RMSE=0.669, MAE=4.027 $/MWh (2025 holdout). Submitted spike classifier: XGB Clf v3, PR-AUC=0.237, F1=0.329. Post-submission improvement: XGB-slim (6 features), PR-AUC=0.302, F1=0.389.
 
 ---
 
@@ -15,7 +15,7 @@ ERCOT electricity price volatility forecasting for the Texas Houston Hub.
 |---|---|---|
 | `data_cleaning.ipynb` | Raw ERCOT CSVs → processed parquets | §1 Setup · §2 Dataset Inventory · §3 Load & Clean · §4 Validation · §5 Build Processed Data · §6 Save Outputs |
 | `eda.ipynb` | EDA, feature engineering, leakage-safe design | §1 Setup · §2 Target Variable · §3 Feature EDA · §4 Regime Analysis · §5 Modeling Roadmap · Appendix A–B |
-| `model_regression.ipynb` | Regression: baseline through XGBoost v3 tuned, error analysis, rolling forecast, drift detection | §6 Baseline · §7 Model Improvements · §8 Leaderboard · §9 Error Analysis · §10 Rolling Forecast & Drift |
+| `model_regression.ipynb` | Regression: baseline through XGBoost v3 tuned, error analysis, rolling forecast, drift detection | §6 Baseline · §7 Model Improvements · §8 Ensemble · §9 Error Analysis & Leaderboard · §10 Rolling Forecast & Drift |
 | `model_classifier.ipynb` | Spike classifier: walk-forward CV + test evaluation for binary spike detection (RTM > $100/MWh) | §9.1 CV Diagnostics · §9.2 PR Curves · §9.3 Test Evaluation |
 | `presentation.ipynb` | Erdos showcase: narrative, EDA plots, model leaderboard, error analysis, conclusions | §1–§7 |
 
@@ -146,9 +146,10 @@ Top features (v3 tuned): GARCH conditional vol (~25%), Houston Hub DAM price (~1
 | Model | CV PR-AUC | CV F1 (mean) | Selection |
 |---|---|---|---|
 | Naive: DAM > $100 | — | 0.471 | ✅ best CV F1 (regime-specific) |
-| XGB Clf v1 (21 feat) | **0.363** | 0.433 | **✅ selected by PR-AUC** |
+| XGB Clf v1 (21 feat) | **0.363** | 0.433 | ✗ |
 | XGB Clf v2 (29 feat) | 0.359 | 0.438 | ✗ |
-| XGB Clf v3 (31 feat) | 0.351 | 0.426 | ✗ |
+| **XGB Clf v3 (31 feat)** | **0.351** | **0.426** | **✗** |
+| *XGB-slim (6 feat, post-submission)* | *TBD* | *TBD* | *post-submission* |
 
 **Test 2025 (2.24% spike rate, 196/8,760 hours):**
 
@@ -159,6 +160,9 @@ Top features (v3 tuned): GARCH conditional vol (~25%), Houston Hub DAM price (~1
 | XGB Clf v1 | 0.229 | 0.323 | 0.239 | 0.500 |
 | XGB Clf v2 | 0.237 | 0.317 | 0.251 | 0.439 |
 | **XGB Clf v3** | **0.237** | **0.329** | **0.251** | **0.474** |
+| *XGB-slim (6 feat, post-submission)* | *0.302* | *0.389* | *0.340* | *0.454* |
+
+> **Post-submission note:** XGB-slim uses 6 spike-relevant features (`dam_price_houston`, `system_lambda`, `mcpc_regup`, `rtm_std_lag24`, `abs_dam_rtm_spread`, `garch_cond_vol`) with depth=3 and post-Uri (2021–2024) training. It is the first classifier to beat DAM continuous on both PR-AUC and F1. A comprehensive ablation of 25+ variants (feature swaps, interactions, temporal context, isolation forest, calibrated ensembles, quantile regression, multi-model blends) confirmed that no variant consistently improves over the 6-feature model.
 
 **Train/Test/Hold-out split:**
 - Train: 2017-07-04 → 2024-12-31 (65,712 hours)

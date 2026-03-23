@@ -11,15 +11,15 @@ Team: Yun, Eric, Neeraj (+ others)
 - Downloaded all 9 ERCOT datasets (2017-07 → 2025-12) + weather CSVs
 - Backfilled `postDateTime` for all datasets (100% coverage)
 - Built processed parquets: load, DAM, RTM, ancillary, wind, outage, weather (all in `data/processed/ercot/`)
-- Compressed shareable archive: `processed_ercot_2026-03-16.tar.gz` (81 MB)
+- Compressed shareable archive: `processed_ercot_2026-03-20.tar.gz` (73 MB)
 
 ### Feature Engineering
 - Designed leakage-safe `build_features(delivery_date)` — 6PM D-1 cutoff, no look-ahead
 - Audited `build_features()` — no direct leakage; 3 issues fixed (outage fallback, ECRS fillna, ECRS flag)
 - Added 5 weather features (`temp_f`, `humidity_pct`, `wind_gust_mph`, `precip_in`, `temp_f_texas`)
 - Built `train_features.parquet` (~65,688 rows, 2017-07 → 2024-12) and `test_features.parquet` (~8,760 rows, 2025)
-- Built `all_features.parquet` (~74,448 rows, all 31 features + split label)
-- Removed `mcpc_ecrs`, `mcpc_ecrs_available`, `log_mcpc_ecrs`, `mcpc_ecrs_above_50` from all feature sets (launched 2021-06, too short coverage) — feature counts: v1=23, v2=30, v3=31
+- Built `all_features.parquet` (74,472 rows, 30 features + 4 targets + split label — created by modeling.ipynb)
+- Removed `mcpc_ecrs`, `mcpc_ecrs_available`, `log_mcpc_ecrs`, `mcpc_ecrs_above_50` from all feature sets (launched 2021-06, too short coverage) — feature counts: v1=22, v2=29, v3=30
 - Fixed `build_features()` performance: `_day()` now uses vectorized timestamp comparison (was `.dt.date`, caused KeyboardInterrupt on large parquets)
 - **RTM std target updated to 5-point**: `rtm_price_std_hb_houston` now includes boundary point p0 of next hour, capturing inter-hour price jump; mean/max/min remain 4-point
 
@@ -125,13 +125,21 @@ Team: Yun, Eric, Neeraj (+ others)
 
 ## 🔥 High Priority — Presentation
 
-- [ ] **Build presentation notebook** — clean 1-notebook summary for Erdos showcase:
+- [ ] **[DataAgent]** Rebuild `ercot_combined.parquet` — Houston wind swap (`wgrpp_lz_south_houston` in merge)
+- [ ] **[DataAgent]** Fix weather CSVs — download actual content (currently LFS pointer stubs), rerun `weather_data_processing.py`
+- [ ] **[ValidationAgent]** Schema + row count check after rebuild
+- [ ] **[EDAAgent]** Re-run `eda.ipynb` §3–§5 after parquet rebuild
+- [ ] **[ModelAgent]** Rebuild feature parquets + retrain all models (v2/v3 reg+clf, rolling Lasso, §7.5, §9)
+- [ ] **[ValidationAgent]** Verify feature parquets + notebook run after retrain
+- [ ] **[PresentationAgent]** Build `presentation.ipynb` — clean 1-notebook summary for Erdos showcase:
   - Problem statement + ERCOT context
   - 3–4 key EDA plots (YoY volatility trend, spike clustering, Uri zoom, feature correlations)
   - Model leaderboard table
   - Error analysis plots (MAE by hour/month, spike vs non-spike)
   - Rolling Lasso heatmap (regime shifts)
   - Conclusion + limitations
+- [ ] **[PythonAgent]** Convert notebooks to `src/` Python scripts once notebooks are stable
+- [ ] **[GitAgent]** Commit all of the above once each stage is verified
 
 ---
 
@@ -163,8 +171,8 @@ Team: Yun, Eric, Neeraj (+ others)
 
 ## Collaboration Notes
 
-- **Data**: local only (gitignored) — use `processed_ercot_2026-03-16.tar.gz` to share; extract into `data/processed/`
-- **Notebooks**: `data_cleaning.ipynb` builds parquets; `analysis.ipynb` has all analysis and models
-- **Run order**: restart kernel, run `analysis.ipynb` top-to-bottom; Section 7.3 must run before 7.4/7.5/8/9; Section 9 is memory-intensive — if kernel crashes at Sec 9.2, run drift scripts standalone in `/tmp/`
+- **Data**: local only (gitignored) — use `compressed/processed_ercot_2026-03-20.tar.gz` to share; extract into `data/processed/`
+- **Notebooks**: `data_cleaning.ipynb` builds parquets; `eda.ipynb` (§1–5) and `modeling.ipynb` (§6–10) have all analysis and models
+- **Run order**: restart kernel, run `eda.ipynb` then `modeling.ipynb`; Section 7.3 must run before 7.4/7.5/8/9; Section 9 is memory-intensive — if kernel crashes at Sec 9.2, run drift scripts standalone in `/tmp/`
 - **conda env**: `erdos_ds_environment` — run `conda run -n erdos_ds_environment pip install arch` if missing
 - **Train/test split**: Train ≤2024-12-31 | Test 2025 | Hold-out 2026

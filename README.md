@@ -84,7 +84,9 @@ compressed/
 figures/
 ├── data_cleaning/                        # Plots from data_cleaning.ipynb
 ├── eda/                                  # Plots from eda.ipynb
-└── modeling/                             # Plots from model_regression.ipynb and model_classifier.ipynb
+├── model_regression/                     # Plots from model_regression.ipynb
+├── model_classifier/                     # Plots from model_classifier.ipynb
+└── presentation/                         # Plots from presentation.ipynb
 
 docs/                                     # Project documentation (gitignored locally)
 scripts/                                  # Python utility scripts

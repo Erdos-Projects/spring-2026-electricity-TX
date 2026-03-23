@@ -64,12 +64,12 @@ All 22 base features documented with descriptions. Features are organized by cat
 | Weather (Houston) | `temp_f_houston_avg`, `humidity_pct_houston_avg`, `wind_gust_mph_houston_avg`, `precip_in_houston_avg` |
 | Calendar | `hour`, `month`, `dow` |
 
-**Additional features documented in modeling.ipynb:**
-- `garch_cond_vol` — GARCH(1,1)-t conditional volatility (§7.3); #2 feature by importance
+**Additional features documented in model_regression.ipynb:**
+- `garch_cond_vol` — GARCH(1,1)-t conditional volatility (§7.3); #1 feature by importance (~25%)
 - `rtm_price_std`, `rtm_price_mean` — raw targets
 - `log_rtm_std` — regression target; `spike_flag` — classifier target
 
-**Status:** All 22 base features have full descriptions and leakage status in Appendix A. Engineered features (`garch_cond_vol`) documented in modeling.ipynb §7.3.
+**Status:** All 22 base features have full descriptions and leakage status in Appendix A. Engineered features (`garch_cond_vol`) documented in model_regression.ipynb §7.3.
 
 ---
 

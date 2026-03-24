@@ -19,6 +19,5 @@ logs/
 *.xlsx
 compressed/
 archive/
-docs/
 scripts/archive/
 memory/

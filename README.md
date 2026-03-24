@@ -3,7 +3,7 @@
 ERCOT electricity price volatility forecasting for the Texas Houston Hub.
 **Goal:** predict intra-hour RTM price volatility (`log(rtm_price_std)`) and flag price spikes (>$100/MWh) using day-ahead features available at midnight CST.
 
-**Status:** Complete. Final regression model: XGBoost v3 tuned (31 features, +GARCH D-1 lag, post-Uri 2021–2024 window). Test R²=0.386, RMSE=0.669, MAE=4.027 $/MWh (2025 holdout). Submitted spike classifier: XGB Clf v3, PR-AUC=0.237, F1=0.329. Post-submission improvement: XGB-slim (6 features), PR-AUC=0.302, F1=0.389.
+**Status:** Complete. Final regression model: XGBoost v3 tuned (31 features, +GARCH D-1 lag, post-Uri 2021–2024 window). Test R²=0.393, RMSE=0.665, MAE=4.033 $/MWh (2025 holdout). Submitted spike classifier: XGB Clf v3, PR-AUC=0.237, F1=0.329. Post-submission improvement: XGB-slim (6 features), PR-AUC=0.302, F1=0.389.
 
 ---
 

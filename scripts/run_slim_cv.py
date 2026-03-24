@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Execute classifier cells 1 (setup) and 5 (XGB-slim CV) and save outputs."""
+"""Execute classifier cells: setup, v1-v3 CV, slim CV, CV plots, test plots."""
 import nbformat
 from nbclient import NotebookClient
 from jupyter_client.manager import KernelManager
 
 NB_PATH = 'model_classifier.ipynb'
-CELLS_TO_RUN = [1, 5]  # clf-setup, XGB-slim with CV
+CELLS_TO_RUN = [1, 2, 3, 5, 7, 9]  # setup, error analysis, v1-v3 CV, slim CV, CV plots, test plots
 
 nb = nbformat.read(NB_PATH, as_version=4)
 
@@ -21,7 +21,7 @@ client.kc = kc
 for i in CELLS_TO_RUN:
     cell = nb.cells[i]
     first_line = cell.source.split('\n')[0][:75]
-    print(f"\nCell {i}: {first_line}", flush=True)
+    print(f"\n{'='*60}\nCell {i}: {first_line}", flush=True)
 
     try:
         client.execute_cell(cell, i)
@@ -31,7 +31,7 @@ for i in CELLS_TO_RUN:
 
     for out in cell.get('outputs', []):
         if out.output_type == 'stream':
-            print(out.text, end='', flush=True)
+            print(out.text[:500], end='', flush=True)
         elif out.output_type == 'error':
             print(f"  ERROR: {out.ename}: {out.evalue}", flush=True)
         elif out.output_type == 'display_data':

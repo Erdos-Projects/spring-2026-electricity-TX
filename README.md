@@ -135,7 +135,7 @@ Model selection uses **walk-forward CV R²** (val folds 2022/2023/2024). Test se
 | XGBoost v2 | 29 | 2017–2024 | — | 0.369 | 0.678 | 4.101 | ✗ |
 | XGBoost v3 (orig params) | 31 | 2017–2024 | 0.286 | 0.372 | 0.676 | 4.102 | ✗ |
 | XGBoost v3 tuned (full train) | 31 | 2017–2024 | 0.311 | 0.385 | 0.669 | 4.028 | ✗ |
-| **XGBoost v3 tuned (post-Uri)** | **31** | **2021–2024** | **0.311** | **0.386** | **0.669** | **4.027** | **✅ FINAL** |
+| **XGBoost v3 tuned (post-Uri)** | **31** | **2021–2024** | **0.311** | **0.393** | **0.665** | **4.033** | **✅ FINAL** |
 
 **Rolling forecast (2025, 53 weeks):** Sliding 4-year window retraining beats fixed model in 43/53 weeks (MAE 0.4925 vs 0.5069).
 
